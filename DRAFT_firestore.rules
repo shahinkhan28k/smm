@@ -1,0 +1,175 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // --- Global Safety Net ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Common Primitives ---
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // Admin Check (Bootstrapped via Email)
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true && 
+        (
+          request.auth.token.email == 'shahinkhan28a@gmail.com' ||
+          request.auth.token.email == 'shahinkhan28w@gmail.com' ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        )
+      );
+    }
+
+    // --- Entity Validations ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'balance', 'role', 'displayName']) &&
+             data.uid == request.auth.uid &&
+             data.email is string && data.email.size() <= 255 &&
+             data.balance is number && data.balance >= 0 &&
+             data.role in ['user', 'admin', 'moderator'] &&
+             data.displayName is string && data.displayName.size() <= 100;
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['name']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100;
+    }
+
+    function isValidService(data) {
+      return data.keys().hasAll(['categoryId', 'name', 'pricePer1k', 'minQuantity', 'maxQuantity']) &&
+             data.categoryId is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.pricePer1k is number && data.pricePer1k >= 0 &&
+             data.minQuantity is number && data.minQuantity > 0 &&
+             data.maxQuantity is number && data.maxQuantity >= data.minQuantity;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['userId', 'serviceId', 'link', 'quantity', 'charge', 'status', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.serviceId is string &&
+             data.link is string && data.link.size() > 5 && data.link.size() <= 1000 &&
+             data.quantity is number && data.quantity > 0 &&
+             data.charge is number && data.charge >= 0 &&
+             data.status in ['pending', 'processing', 'inprogress', 'completed', 'partial', 'canceled', 'refunded'] &&
+             data.createdAt == request.time;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['userId', 'amount', 'type', 'status', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.amount is number && data.amount > 0 &&
+             data.type in ['deposit', 'order', 'refund'] &&
+             data.status in ['pending', 'completed', 'failed', 'rejected'] &&
+             data.createdAt == request.time;
+    }
+
+    function isValidTicket(data) {
+      return data.keys().hasAll(['userId', 'subject', 'message', 'status', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.subject is string && data.subject.size() > 0 && data.subject.size() <= 200 &&
+             data.message is string && data.message.size() > 0 && data.message.size() <= 5000 &&
+             data.status in ['open', 'answered', 'closed', 'pending'] &&
+             data.createdAt == request.time;
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['roomId', 'senderId', 'senderType', 'createdAt']) &&
+             data.roomId is string &&
+             data.senderId == request.auth.uid &&
+             data.senderType in ['user', 'admin'] &&
+             data.createdAt == request.time &&
+             (!data.keys().contains('text') || (data.text is string && data.text.size() <= 1000));
+    }
+
+    // --- Collection Routes ---
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().role == 'user' && incoming().balance == 0;
+      allow update: if (isOwner(userId) || isAdmin()) && (
+        // User update (restricted fields)
+        (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'profileImage'])) ||
+        // Admin update
+        isAdmin()
+      );
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidCategory(incoming());
+    }
+
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidService(incoming());
+    }
+
+    match /orders/{orderId} {
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidOrder(incoming()) && 
+                    exists(/databases/$(database)/documents/services/$(incoming().serviceId));
+      allow update: if isAdmin();
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidTransaction(incoming()) && incoming().status == 'pending';
+      allow update: if isAdmin();
+    }
+
+    match /messages/{messageId} {
+      allow read, list: if isSignedIn() && (resource.data.roomId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidMessage(incoming()) && (incoming().roomId == request.auth.uid || isAdmin());
+    }
+
+    match /tickets/{ticketId} {
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidTicket(incoming());
+      allow update: if isOwner(resource.data.userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /providers/{providerId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /notifications/{notifId} {
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /news/{newsId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /affiliates/{affId} {
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow write: if isSignedIn();
+    }
+
+    match /child_panels/{panelId} {
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow write: if isSignedIn();
+    }
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with balance and role",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "balance": { "type": "number" },
+        "role": { "type": "string", "enum": ["user", "admin", "moderator"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "balance", "role"]
+    },
+    "Setting": {
+      "title": "Site Setting",
+      "description": "General system configuration",
+      "type": "object",
+      "properties": {
+        "siteName": { "type": "string" },
+        "faviconUrl": { "type": "string" },
+        "bannerTitle": { "type": "string" },
+        "bannerText": { "type": "string" },
+        "bannerImage": { "type": "string" },
+        "tabTitle": { "type": "string" }
+      }
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Service categories",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "sortOrder": { "type": "number" }
+      },
+      "required": ["name"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "Available social media services",
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string" },
+        "name": { "type": "string" },
+        "pricePer1k": { "type": "number" },
+        "minQuantity": { "type": "number" },
+        "maxQuantity": { "type": "number" },
+        "description": { "type": "string" },
+        "providerId": { "type": "string" },
+        "providerServiceId": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "disabled"] }
+      },
+      "required": ["categoryId", "name", "pricePer1k", "minQuantity", "maxQuantity"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Social media service orders",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "serviceId": { "type": "string" },
+        "link": { "type": "string" },
+        "quantity": { "type": "number" },
+        "charge": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "processing", "inprogress", "completed", "partial", "canceled", "refunded"] },
+        "providerOrderId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "serviceId", "link", "quantity", "charge", "status", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Balance add/deduct transactions",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["deposit", "order", "refund"] },
+        "method": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "adminNote": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "type", "status", "createdAt"]
+    },
+    "Setting": {
+      "title": "Site Setting",
+      "description": "General system configuration",
+      "type": "object",
+      "properties": {
+        "siteName": { "type": "string" },
+        "faviconUrl": { "type": "string" },
+        "bannerTitle": { "type": "string" },
+        "bannerText": { "type": "string" },
+        "bannerImage": { "type": "string" },
+        "tabTitle": { "type": "string" },
+        "paymentNumbers": {
+           "type": "object",
+           "properties": {
+             "bkash": { "type": "string" },
+             "nagad": { "type": "string" },
+             "rocket": { "type": "string" },
+             "bank": { "type": "string" }
+           }
+        },
+        "supportLinks": {
+          "type": "object",
+          "properties": {
+            "whatsapp": { "type": "string" },
+            "telegram": { "type": "string" }
+          }
+        }
+      }
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "Live support messages",
+      "type": "object",
+      "properties": {
+        "roomId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderType": { "type": "string", "enum": ["user", "admin"] },
+        "text": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["roomId", "senderId", "senderType", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users": { "schema": "User", "description": "Users of the platform" },
+    "categories": { "schema": "Category", "description": "Service categories" },
+    "services": { "schema": "Service", "description": "Available services" },
+    "orders": { "schema": "Order", "description": "System orders" },
+    "transactions": { "schema": "Transaction", "description": "Financial logs" },
+    "tickets": { "schema": "Ticket", "description": "Support tickets" },
+    "providers": { "schema": "Provider", "description": "External panel APIs" },
+    "settings": { "schema": "Setting", "description": "Global app settings" },
+    "messages": { "schema": "ChatMessage", "description": "Live chat messages" }
+  }
+}
