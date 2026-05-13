@@ -74,34 +74,35 @@ export default function AdminSettings() {
       console.error("AdminSettings: Error loading providers", err);
     });
 
-    const unsubSettings = onSnapshot(doc(db, 'settings', 'site'), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setSiteSettings(prev => ({
-          ...prev,
-          ...data,
-          paymentNumbers: { ...prev.paymentNumbers, ...(data.paymentNumbers || {}) },
-          supportLinks: { ...prev.supportLinks, ...(data.supportLinks || {}) }
-        }));
-      }
-    }, (err) => {
-      console.warn("AdminSettings: Error loading site settings", err);
-    });
+    // Load site settings once on mount to populate the form without interfering with edits
+    const loadSettings = async () => {
+      try {
+        const siteDoc = await getDoc(doc(db, 'settings', 'site'));
+        if (siteDoc.exists()) {
+          const data = siteDoc.data();
+          setSiteSettings(prev => ({
+            ...prev,
+            ...data,
+            paymentNumbers: { ...prev.paymentNumbers, ...(data.paymentNumbers || {}) },
+            supportLinks: { ...prev.supportLinks, ...(data.supportLinks || {}) }
+          }));
+        }
 
-    const unsubPages = onSnapshot(doc(db, 'settings', 'pages'), (snap) => {
-      if (snap.exists()) {
-        setPageContent(snap.data() as PageContent);
+        const pagesDoc = await getDoc(doc(db, 'settings', 'pages'));
+        if (pagesDoc.exists()) {
+          setPageContent(pagesDoc.data() as PageContent);
+        }
+      } catch (err) {
+        console.error("AdminSettings: Error loading settings initial", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    }, (err) => {
-      console.error("AdminSettings: Error loading page content", err);
-      setLoading(false);
-    });
+    };
+
+    loadSettings();
 
     return () => {
       unsubProviders();
-      unsubSettings();
-      unsubPages();
     };
   }, []);
 
@@ -109,9 +110,17 @@ export default function AdminSettings() {
     e.preventDefault();
     setSavingSettings(true);
     try {
-      console.log("AdminSettings: Updating site settings...", siteSettings);
+      console.log("AdminSettings: Updating site branding...", siteSettings);
       const settingsRef = doc(db, 'settings', 'site');
-      await setDoc(settingsRef, siteSettings, { merge: true });
+      const brandingData = {
+        siteName: siteSettings.siteName,
+        faviconUrl: siteSettings.faviconUrl,
+        bannerTitle: siteSettings.bannerTitle,
+        bannerText: siteSettings.bannerText,
+        bannerImage: siteSettings.bannerImage,
+        tabTitle: siteSettings.tabTitle
+      };
+      await setDoc(settingsRef, brandingData, { merge: true });
       alert('Branding settings updated successfully!');
     } catch (err: any) {
       console.error("AdminSettings Branding Update Error:", err);
@@ -128,9 +137,15 @@ export default function AdminSettings() {
     try {
       console.log("AdminSettings: Updating payment numbers...", siteSettings.paymentNumbers);
       const settingsRef = doc(db, 'settings', 'site');
-      await setDoc(settingsRef, {
-        paymentNumbers: siteSettings.paymentNumbers
-      }, { merge: true });
+      const paymentData = {
+        paymentNumbers: {
+          bkash: siteSettings.paymentNumbers?.bkash || '',
+          nagad: siteSettings.paymentNumbers?.nagad || '',
+          rocket: siteSettings.paymentNumbers?.rocket || '',
+          bank: siteSettings.paymentNumbers?.bank || ''
+        }
+      };
+      await setDoc(settingsRef, paymentData, { merge: true });
       alert('Payment information updated successfully!');
     } catch (err: any) {
       console.error("AdminSettings Payment Update Error:", err);
@@ -147,9 +162,13 @@ export default function AdminSettings() {
     try {
       console.log("AdminSettings: Updating support links...", siteSettings.supportLinks);
       const settingsRef = doc(db, 'settings', 'site');
-      await setDoc(settingsRef, {
-        supportLinks: siteSettings.supportLinks
-      }, { merge: true });
+      const supportData = {
+        supportLinks: {
+          whatsapp: siteSettings.supportLinks?.whatsapp || '',
+          telegram: siteSettings.supportLinks?.telegram || ''
+        }
+      };
+      await setDoc(settingsRef, supportData, { merge: true });
       alert('Support information updated successfully!');
     } catch (err: any) {
       console.error("AdminSettings Support Update Error:", err);

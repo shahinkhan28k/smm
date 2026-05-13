@@ -13,6 +13,7 @@ export default function AddFunds() {
   const [transactionId, setTransactionId] = useState('');
   const [pageSettings, setPageSettings] = useState<any>(null);
   const [siteSettings, setSiteSettings] = useState<any>(null);
+  const [loadingSettings, setLoadingSettings] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300); // 5 minutes timer
@@ -33,8 +34,10 @@ export default function AddFunds() {
     });
     const unsubSite = onSnapshot(doc(db, 'settings', 'site'), (doc) => {
         if (doc.exists()) setSiteSettings(doc.data());
+        setLoadingSettings(false);
     }, (err) => {
         console.warn("AddFunds: Error loading site settings", err);
+        setLoadingSettings(false);
     });
     
     let unsubTransactions = () => {};
@@ -208,20 +211,27 @@ export default function AddFunds() {
               <div className="bg-gray-50/80 p-5 rounded-3xl border border-gray-100 min-w-[240px] shadow-inner">
                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Numbers to Pay ({method.toUpperCase()})</p>
                  <div className="space-y-2">
-                    {numbersArray.length > 0 ? numbersArray.map((num: string, idx: number) => (
-                      <div key={idx} className="flex items-center justify-between gap-3 bg-white px-4 py-3 rounded-2xl border border-gray-100 shadow-sm">
-                        <span className="text-sm font-black text-gray-900 font-mono tracking-wider">{num}</span>
-                        <button 
-                          onClick={() => copyToClipboard(num)}
-                          className={cn(
-                            "p-2 rounded-xl transition-all",
-                            copied === num ? "bg-green-100 text-green-600" : "bg-gray-50 text-gray-400 hover:bg-gray-100"
-                          )}
-                        >
-                          {copied === num ? <Check size={14} /> : <Copy size={14} />}
-                        </button>
+                    {loadingSettings ? (
+                      <div className="space-y-2">
+                        <div className="h-12 bg-white animate-pulse rounded-2xl border border-gray-100" />
+                        <div className="h-12 bg-white animate-pulse rounded-2xl border border-gray-100" />
                       </div>
-                    )) : (
+                    ) : numbersArray.length > 0 ? (
+                      numbersArray.map((num: string, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between gap-3 bg-white px-4 py-3 rounded-2xl border border-gray-100 shadow-sm">
+                          <span className="text-sm font-black text-gray-900 font-mono tracking-wider">{num}</span>
+                          <button 
+                            onClick={() => copyToClipboard(num)}
+                            className={cn(
+                              "p-2 rounded-xl transition-all",
+                              copied === num ? "bg-green-100 text-green-600" : "bg-gray-50 text-gray-400 hover:bg-gray-100"
+                            )}
+                          >
+                            {copied === num ? <Check size={14} /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                      ))
+                    ) : (
                       <div className="text-center py-2">
                         <span className="text-xs font-bold text-gray-400 italic">No numbers added yet</span>
                       </div>

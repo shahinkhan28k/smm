@@ -8,10 +8,13 @@ import { ListOrdered, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react
 interface Order {
   id: string;
   serviceId: string;
+  serviceName?: string;
   link: string;
   quantity: number;
   charge: number;
   status: string;
+  providerOrderId?: string;
+  apiStatusResponse?: any;
   createdAt: Timestamp;
 }
 
@@ -73,44 +76,84 @@ export default function Orders() {
         <h1 className="text-2xl font-bold text-gray-900">Orders History</h1>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
-        {orders.map((order, index) => (
-          <motion.div
-            key={order.id}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4"
-          >
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-gray-400">#{order.id.slice(0, 8)}</span>
-                <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase flex items-center gap-1 ${getStatusStyle(order.status)}`}>
-                  {getStatusIcon(order.status)}
-                  {order.status}
-                </div>
-              </div>
-              <p className="text-sm font-semibold text-gray-800 break-all">{order.link}</p>
-              <div className="flex items-center gap-4 text-xs text-gray-500">
-                <span>Qty: <b>{order.quantity}</b></span>
-                <span>Charge: <b>${order.charge.toFixed(3)}</b></span>
-                <span>{order.createdAt?.toDate().toLocaleDateString()}</span>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-2 md:self-center">
-              <button className="text-blue-600 font-medium text-sm hover:underline">Details</button>
-            </div>
-          </motion.div>
-        ))}
+      <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50/50 border-b border-gray-100">
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">ID / Date</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Service</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Link</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Qty / Price</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Provider ID</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {orders.map((order, index) => (
+                <motion.tr
+                  key={order.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.03 }}
+                  className="hover:bg-gray-50/50 transition-colors"
+                >
+                  <td className="px-6 py-4">
+                    <p className="text-[10px] font-mono text-gray-400">#{order.id.slice(0, 8)}</p>
+                    <p className="text-[10px] font-bold text-gray-500 mt-1">{order.createdAt?.toDate().toLocaleDateString()}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="text-xs font-black text-gray-700 leading-tight max-w-[200px] truncate">
+                      {order.serviceName || 'Unknown Service'}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-1">ID: {order.serviceId.slice(0,6)}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="max-w-[250px]">
+                      <p className="text-xs font-medium text-blue-600 truncate underline cursor-pointer" title={order.link}>{order.link}</p>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="text-xs font-black text-gray-700">{order.quantity}</p>
+                    <p className="text-[10px] font-bold text-indigo-600 mt-1">${order.charge.toFixed(3)}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    {order.providerOrderId ? (
+                      <span className="text-[10px] font-mono bg-gray-100 px-2 py-1 rounded text-gray-500">
+                        {order.providerOrderId}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-gray-300">--</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider ${getStatusStyle(order.status)}`}>
+                      {getStatusIcon(order.status)}
+                      {order.status.replace('_', ' ')}
+                    </div>
+                    {order.apiStatusResponse?.status && (
+                      <p className="text-[9px] text-gray-400 mt-1 font-medium italic">
+                        API: {order.apiStatusResponse.status}
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button className="text-indigo-600 hover:text-indigo-800 font-black text-[10px] uppercase tracking-widest">Details</button>
+                  </td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         {orders.length === 0 && (
-          <div className="bg-white rounded-2xl border-2 border-dashed border-gray-100 py-20 text-center">
+          <div className="py-20 text-center">
             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-300">
               <ListOrdered size={32} />
             </div>
-            <h3 className="text-lg font-medium text-gray-900">No orders yet</h3>
-            <p className="text-gray-500">Start boosting your social media now!</p>
+            <h3 className="text-lg font-bold text-gray-900 uppercase tracking-tight">No orders yet</h3>
+            <p className="text-gray-400 font-medium text-sm">Start boosting your social media now!</p>
           </div>
         )}
       </div>
