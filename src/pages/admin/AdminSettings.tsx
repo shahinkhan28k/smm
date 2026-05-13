@@ -80,8 +80,8 @@ export default function AdminSettings() {
         setSiteSettings(prev => ({
           ...prev,
           ...data,
-          paymentNumbers: data.paymentNumbers || prev.paymentNumbers,
-          supportLinks: data.supportLinks || prev.supportLinks
+          paymentNumbers: { ...prev.paymentNumbers, ...(data.paymentNumbers || {}) },
+          supportLinks: { ...prev.supportLinks, ...(data.supportLinks || {}) }
         }));
       }
     }, (err) => {
@@ -128,9 +128,9 @@ export default function AdminSettings() {
     try {
       console.log("AdminSettings: Updating payment numbers...", siteSettings.paymentNumbers);
       const settingsRef = doc(db, 'settings', 'site');
-      await updateDoc(settingsRef, {
+      await setDoc(settingsRef, {
         paymentNumbers: siteSettings.paymentNumbers
-      });
+      }, { merge: true });
       alert('Payment information updated successfully!');
     } catch (err: any) {
       console.error("AdminSettings Payment Update Error:", err);
@@ -147,9 +147,9 @@ export default function AdminSettings() {
     try {
       console.log("AdminSettings: Updating support links...", siteSettings.supportLinks);
       const settingsRef = doc(db, 'settings', 'site');
-      await updateDoc(settingsRef, {
+      await setDoc(settingsRef, {
         supportLinks: siteSettings.supportLinks
-      });
+      }, { merge: true });
       alert('Support information updated successfully!');
     } catch (err: any) {
       console.error("AdminSettings Support Update Error:", err);
@@ -296,7 +296,15 @@ export default function AdminSettings() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-black text-gray-900 uppercase tracking-tighter mb-2">System Settings</h1>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-3xl font-black text-gray-900 uppercase tracking-tighter">System Settings</h1>
+          {savingSettings && (
+            <div className="flex items-center gap-2 text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100">
+               <RefreshCw size={14} className="animate-spin" />
+               <span className="text-[10px] font-black uppercase tracking-widest">Syncing Changes...</span>
+            </div>
+          )}
+        </div>
         <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.2em]">Manage your panel configuration</p>
       </div>
 
@@ -347,30 +355,48 @@ export default function AdminSettings() {
                 <h3 className="font-black uppercase text-xs text-gray-400 tracking-widest mb-4">Identity</h3>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Website Name</label>
-                  <input type="text" value={siteSettings.siteName} onChange={e => setSiteSettings({...siteSettings, siteName: e.target.value})} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
+                  <input type="text" value={siteSettings.siteName} onChange={e => {
+                    const val = e.target.value;
+                    setSiteSettings(prev => ({...prev, siteName: val}));
+                  }} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Tab Title</label>
-                  <input type="text" value={siteSettings.tabTitle} onChange={e => setSiteSettings({...siteSettings, tabTitle: e.target.value})} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
+                  <input type="text" value={siteSettings.tabTitle} onChange={e => {
+                    const val = e.target.value;
+                    setSiteSettings(prev => ({...prev, tabTitle: val}));
+                  }} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Favicon URL</label>
-                  <input type="text" value={siteSettings.faviconUrl} onChange={e => setSiteSettings({...siteSettings, faviconUrl: e.target.value})} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
+                  <input type="text" value={siteSettings.faviconUrl} onChange={e => {
+                    const val = e.target.value;
+                    setSiteSettings(prev => ({...prev, faviconUrl: val}));
+                  }} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
                 </div>
               </div>
               <div className="space-y-4">
                 <h3 className="font-black uppercase text-xs text-gray-400 tracking-widest mb-4">Hero Section</h3>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Banner Title</label>
-                  <input type="text" value={siteSettings.bannerTitle} onChange={e => setSiteSettings({...siteSettings, bannerTitle: e.target.value})} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
+                  <input type="text" value={siteSettings.bannerTitle} onChange={e => {
+                    const val = e.target.value;
+                    setSiteSettings(prev => ({...prev, bannerTitle: val}));
+                  }} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Banner Text</label>
-                  <input type="text" value={siteSettings.bannerText} onChange={e => setSiteSettings({...siteSettings, bannerText: e.target.value})} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
+                  <input type="text" value={siteSettings.bannerText} onChange={e => {
+                    const val = e.target.value;
+                    setSiteSettings(prev => ({...prev, bannerText: val}));
+                  }} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Banner Image URL</label>
-                  <input type="text" value={siteSettings.bannerImage} onChange={e => setSiteSettings({...siteSettings, bannerImage: e.target.value})} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
+                  <input type="text" value={siteSettings.bannerImage} onChange={e => {
+                    const val = e.target.value;
+                    setSiteSettings(prev => ({...prev, bannerImage: val}));
+                  }} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
                 </div>
               </div>
             </div>
@@ -448,21 +474,33 @@ export default function AdminSettings() {
                 <h3 className="font-black uppercase text-xs text-gray-400 tracking-widest mb-4">Payment Numbers (Comma separated)</h3>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">bKash Numbers</label>
-                  <input type="text" value={siteSettings.paymentNumbers?.bkash || ''} onChange={e => setSiteSettings({...siteSettings, paymentNumbers: {...siteSettings.paymentNumbers, bkash: e.target.value}})} placeholder="017..., 018..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
+                  <input type="text" value={siteSettings.paymentNumbers?.bkash || ''} onChange={e => {
+                    const val = e.target.value;
+                    setSiteSettings(prev => ({...prev, paymentNumbers: {...prev.paymentNumbers, bkash: val}}));
+                  }} placeholder="017..., 018..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Nagad Numbers</label>
-                  <input type="text" value={siteSettings.paymentNumbers?.nagad || ''} onChange={e => setSiteSettings({...siteSettings, paymentNumbers: {...siteSettings.paymentNumbers, nagad: e.target.value}})} placeholder="019..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
+                  <input type="text" value={siteSettings.paymentNumbers?.nagad || ''} onChange={e => {
+                    const val = e.target.value;
+                    setSiteSettings(prev => ({...prev, paymentNumbers: {...prev.paymentNumbers, nagad: val}}));
+                  }} placeholder="019..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
               </div>
               <div className="space-y-4 pt-8">
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Rocket Numbers</label>
-                  <input type="text" value={siteSettings.paymentNumbers?.rocket || ''} onChange={e => setSiteSettings({...siteSettings, paymentNumbers: {...siteSettings.paymentNumbers, rocket: e.target.value}})} placeholder="018..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
+                  <input type="text" value={siteSettings.paymentNumbers?.rocket || ''} onChange={e => {
+                    const val = e.target.value;
+                    setSiteSettings(prev => ({...prev, paymentNumbers: {...prev.paymentNumbers, rocket: val}}));
+                  }} placeholder="018..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Bank Transfer Details</label>
-                  <textarea value={siteSettings.paymentNumbers?.bank || ''} onChange={e => setSiteSettings({...siteSettings, paymentNumbers: {...siteSettings.paymentNumbers, bank: e.target.value}})} placeholder="Bank Name / Account No" className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold h-24 mt-1" />
+                  <textarea value={siteSettings.paymentNumbers?.bank || ''} onChange={e => {
+                    const val = e.target.value;
+                    setSiteSettings(prev => ({...prev, paymentNumbers: {...prev.paymentNumbers, bank: val}}));
+                  }} placeholder="Bank Name / Account No" className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold h-24 mt-1" />
                 </div>
               </div>
             </div>
