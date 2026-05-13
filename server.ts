@@ -90,6 +90,16 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
+    // Explicit SPA fallback for dev if needed
+    app.get('*', async (req, res, next) => {
+      try {
+        const url = req.originalUrl;
+        const indexHtml = await vite.transformIndexHtml(url, `<!DOCTYPE html><html><head></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>`);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(indexHtml);
+      } catch (e) {
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));

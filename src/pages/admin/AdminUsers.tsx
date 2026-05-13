@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, doc, updateDoc, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { motion } from 'motion/react';
 import { Users, Search, Edit2, Wallet, Shield, Mail, CheckCircle2 } from 'lucide-react';
@@ -20,19 +20,18 @@ export default function AdminUsers() {
   const [newBalance, setNewBalance] = useState('');
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  const fetchUsers = async () => {
-    try {
-      const snap = await getDocs(collection(db, 'users'));
-      setUsers(snap.docs.map(doc => ({ ...doc.data() } as UserData)));
-    } catch (err) {
-      console.error(err);
-    } finally {
+    const q = query(collection(db, 'users'), orderBy('email'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setUsers(snapshot.docs.map(doc => ({ ...doc.data() } as UserData)));
       setLoading(false);
-    }
-  };
+    }, (error) => {
+      console.error("AdminUsers snapshot error:", error);
+      handleFirestoreError(error, OperationType.GET, 'users');
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleUpdateBalance = async () => {
     if (!editingUser || !newBalance) return;
@@ -41,7 +40,7 @@ export default function AdminUsers() {
       await updateDoc(userRef, { balance: parseFloat(newBalance) });
       setEditingUser(null);
       setNewBalance('');
-      fetchUsers();
+      // No need to fetchUsers() here anymore, snapshot handles it
     } catch (err) {
       console.error(err);
       alert('Failed to update balance');

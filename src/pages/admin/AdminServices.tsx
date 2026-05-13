@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, writeBatch, getDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, writeBatch, getDoc, onSnapshot } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { Layers, Plus, Trash2, Edit2, CheckCircle2, XCircle, Search, RefreshCw, Globe } from 'lucide-react';
@@ -74,35 +74,34 @@ export default function AdminServices() {
   const [newService, setNewService] = useState(initialServiceState);
 
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      const catSnap = await getDocs(query(collection(db, 'categories'), orderBy('name')));
-      const servSnap = await getDocs(collection(db, 'services'));
-      const provSnap = await getDocs(collection(db, 'providers'));
-      
-      const cats = catSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
-      const provs = provSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Provider));
-      
+    const unsubCats = onSnapshot(query(collection(db, 'categories'), orderBy('name')), (snap) => {
+      const cats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
       setCategories(cats);
-      setServices(servSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service)));
-      setProviders(provs);
-      
-      if (cats.length > 0) {
+      if (cats.length > 0 && !newService.categoryId) {
         setNewService(prev => ({ ...prev, categoryId: cats[0].id }));
       }
-      if (provs.length > 0) {
+    });
+
+    const unsubServs = onSnapshot(collection(db, 'services'), (snap) => {
+      setServices(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service)));
+      setLoading(false);
+    });
+
+    const unsubProvs = onSnapshot(collection(db, 'providers'), (snap) => {
+      const provs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Provider));
+      setProviders(provs);
+      if (provs.length > 0 && !selectedProvider) {
         setSelectedProvider(provs[0].id);
         setNewService(prev => ({ ...prev, providerId: provs[0].id }));
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    });
+
+    return () => {
+      unsubCats();
+      unsubServs();
+      unsubProvs();
+    };
+  }, []);
 
   const handleSync = async () => {
     if (!selectedProvider) return;
@@ -165,7 +164,7 @@ export default function AdminServices() {
       }
 
       await batch.commit();
-      fetchData();
+      // fetchData(); // Auto updated by onSnapshot
       alert(`Successfully synced ${externalServices.length} services from provider with ${pData.markupPercentage}% markup!`);
     } catch (err) {
       console.error(err);
@@ -181,7 +180,7 @@ export default function AdminServices() {
       await addDoc(collection(db, 'categories'), { name: newCatName });
       setNewCatName('');
       setShowAddCat(false);
-      fetchData();
+      // fetchData(); // Auto updated
     } catch (err) {
       console.error(err);
     }
@@ -198,7 +197,7 @@ export default function AdminServices() {
       setShowAddService(false);
       setEditingService(null);
       setNewService(initialServiceState);
-      fetchData();
+      // fetchData(); // Auto updated
     } catch (err) {
       console.error(err);
     }
@@ -234,7 +233,7 @@ export default function AdminServices() {
     if(!confirm('Delete this service?')) return;
     try {
       await deleteDoc(doc(db, 'services', id));
-      fetchData();
+      // fetchData(); // Auto updated
     } catch (err) {
       console.error(err);
     }

@@ -8,6 +8,8 @@ interface Order {
   id: string;
   userId: string;
   serviceId: string;
+  serviceName?: string;
+  userEmail?: string;
   link: string;
   quantity: number;
   charge: number;
@@ -97,7 +99,7 @@ export default function AdminOrders() {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Order Info</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Order Info / User</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Target Link</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Details</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
@@ -117,11 +119,15 @@ export default function AdminOrders() {
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="text-xs font-mono text-gray-400">#{order.id.slice(0, 8)}</span>
-                        <span className="text-xs text-gray-500">{order.createdAt?.toDate().toLocaleString()}</span>
+                        <span className="text-xs font-bold text-gray-900">{order.userEmail || 'UID: ' + order.userId.slice(0, 6)}</span>
+                        <span className="text-[10px] text-gray-400">{order.createdAt?.toDate?.()?.toLocaleString() || 'N/A'}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm font-bold text-gray-800 truncate max-w-xs">{order.link}</p>
+                      <div className="flex flex-col">
+                        <p className="text-sm font-bold text-gray-800 truncate max-w-xs">{order.link}</p>
+                        {order.serviceName && <span className="text-[10px] text-indigo-500 font-black uppercase tracking-tighter">{order.serviceName}</span>}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">

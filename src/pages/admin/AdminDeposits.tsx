@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, doc, updateDoc, increment, runTransaction, orderBy } from 'firebase/firestore';
+import { collection, query, where, doc, updateDoc, increment, runTransaction, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Wallet, Check, X, Search, Clock, User as UserIcon } from 'lucide-react';
+import { Wallet, Check, X, Search, Clock, User as UserIcon, Bell } from 'lucide-react';
 
 interface DepositRequest {
   id: string;
@@ -21,25 +21,23 @@ export default function AdminDeposits() {
   const [processing, setProcessing] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchRequests();
-  }, []);
-
-  const fetchRequests = async () => {
-    try {
-      const q = query(
-        collection(db, 'transactions'),
-        where('type', '==', 'deposit'),
-        orderBy('createdAt', 'desc')
-      );
-      const snap = await getDocs(q);
-      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DepositRequest));
+    const q = query(
+      collection(db, 'transactions'),
+      where('type', '==', 'deposit'),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DepositRequest));
       setRequests(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
       setLoading(false);
-    }
-  };
+    }, (error) => {
+      console.error("Firestore Error in AdminDeposits:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleApprove = async (request: DepositRequest) => {
     if (!confirm(`Are you sure you want to approve $${request.amount} for user ID ${request.userId}?`)) return;
@@ -62,7 +60,6 @@ export default function AdminDeposits() {
         });
       });
       alert('Deposit approved successfully!');
-      fetchRequests();
     } catch (err: any) {
       console.error(err);
       alert('Failed to approve: ' + err.message);
@@ -82,7 +79,6 @@ export default function AdminDeposits() {
         updatedAt: new Date()
       });
       alert('Deposit rejected.');
-      fetchRequests();
     } catch (err) {
       console.error(err);
     } finally {
@@ -124,7 +120,8 @@ export default function AdminDeposits() {
                     </div>
                     <div>
                       <p className="text-2xl font-black text-gray-900">${req.amount.toFixed(2)}</p>
-                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest uppercase">{req.method}</p>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{req.method}</p>
+                      {req.userEmail && <p className="text-[10px] font-bold text-indigo-500 lowercase">{req.userEmail}</p>}
                     </div>
                   </div>
                   <div className="text-right">
@@ -186,7 +183,7 @@ export default function AdminDeposits() {
                   {history.map(req => (
                     <tr key={req.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
-                        <p className="text-xs font-bold text-gray-900 truncate max-w-[120px]">{req.userId}</p>
+                        <p className="text-xs font-bold text-gray-900 truncate max-w-[150px]">{req.userEmail || req.userId}</p>
                         <p className="text-[10px] text-gray-400">{req.createdAt?.toDate?.().toLocaleDateString()}</p>
                       </td>
                       <td className="px-6 py-4">

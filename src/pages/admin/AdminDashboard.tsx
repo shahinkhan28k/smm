@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { motion } from 'motion/react';
 import { Users, ShoppingCart, Wallet, MessageSquare, ArrowUpRight, TrendingUp } from 'lucide-react';
@@ -19,45 +19,52 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const usersSnap = await getDocs(collection(db, 'users'));
-        const ordersSnap = await getDocs(collection(db, 'orders'));
-        const ticketsSnap = await getDocs(collection(db, 'tickets'));
-        const depositsSnap = await getDocs(query(collection(db, 'transactions'), where('type', '==', 'deposit'), where('status', '==', 'pending')));
-        
-        const totalUserBalance = usersSnap.docs.reduce((acc, doc) => acc + (doc.data().balance || 0), 0);
-        const totalRevenue = ordersSnap.docs.reduce((acc, doc) => acc + (doc.data().charge || 0), 0);
-        const openTickets = ticketsSnap.docs.filter(doc => doc.data().status === 'open').length;
-        
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const todayOrders = ordersSnap.docs.filter(doc => {
-          const createdAt = doc.data().createdAt?.toDate();
-          return createdAt && createdAt >= today;
-        }).length;
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+      const usersData = snap.docs.map(doc => doc.data());
+      const totalUserBalance = usersData.reduce((acc, data) => acc + (data.balance || 0), 0);
+      setStats(prev => ({ ...prev, totalUsers: snap.size, totalUserBalance }));
+      setLoading(false);
+    });
 
-        const pendingOrders = ordersSnap.docs.filter(doc => doc.data().status === 'pending').length;
-        const completedOrders = ordersSnap.docs.filter(doc => doc.data().status === 'completed').length;
+    const unsubOrders = onSnapshot(collection(db, 'orders'), (snap) => {
+      const ordersData = snap.docs.map(doc => doc.data());
+      const totalRevenue = ordersData.reduce((acc, data) => acc + (data.charge || 0), 0);
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayOrders = ordersData.filter(data => {
+        const createdAt = data.createdAt?.toDate();
+        return createdAt && createdAt >= today;
+      }).length;
 
-        setStats({
-          totalUsers: usersSnap.size,
-          totalOrders: ordersSnap.size,
-          totalRevenue,
-          openTickets,
-          totalUserBalance,
-          todayOrders,
-          pendingOrders,
-          completedOrders,
-          pendingDeposits: depositsSnap.size
-        });
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+      const pendingOrders = ordersData.filter(data => data.status === 'pending').length;
+      const completedOrders = ordersData.filter(data => data.status === 'completed').length;
+
+      setStats(prev => ({ 
+        ...prev, 
+        totalOrders: snap.size, 
+        totalRevenue, 
+        todayOrders, 
+        pendingOrders, 
+        completedOrders 
+      }));
+    });
+
+    const unsubTickets = onSnapshot(collection(db, 'tickets'), (snap) => {
+      const openTickets = snap.docs.filter(doc => doc.data().status === 'open').length;
+      setStats(prev => ({ ...prev, openTickets }));
+    });
+
+    const unsubDeposits = onSnapshot(query(collection(db, 'transactions'), where('type', '==', 'deposit'), where('status', '==', 'pending')), (snap) => {
+      setStats(prev => ({ ...prev, pendingDeposits: snap.size }));
+    });
+
+    return () => {
+      unsubUsers();
+      unsubOrders();
+      unsubTickets();
+      unsubDeposits();
     };
-    fetchStats();
   }, []);
 
   const statCards = [

@@ -7,13 +7,14 @@ import { signOut } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, query, where } from 'firebase/firestore';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, userData } = useAuth();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [siteName, setSiteName] = useState('Natok Boost');
+  const [pendingDepositsCount, setPendingDepositsCount] = useState(0);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'settings', 'site'), (doc) => {
@@ -30,8 +31,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }
       }
     });
-    return () => unsub();
-  }, []);
+    
+    let unsubDeposits = () => {};
+    if (userData?.role === 'admin') {
+      const q = query(collection(db, 'transactions'), where('type', '==', 'deposit'), where('status', '==', 'pending'));
+      unsubDeposits = onSnapshot(q, (snapshot) => {
+        setPendingDepositsCount(snapshot.size);
+      });
+    }
+
+    return () => {
+      unsub();
+      unsubDeposits();
+    };
+  }, [userData?.role]);
 
   const handleLogout = () => {
     signOut(auth);
@@ -147,15 +160,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       to={link.to}
                       onClick={() => setIsSidebarOpen(false)}
                       className={({ isActive }) => `
-                        flex items-center gap-3 px-4 py-3.5 rounded-2xl font-bold transition-all
+                        flex items-center justify-between px-4 py-3.5 rounded-2xl font-bold transition-all
                         ${isActive 
                           ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' 
                           : 'text-gray-500 hover:bg-indigo-50 hover:text-indigo-600'
                         }
                       `}
                     >
-                      <link.icon size={20} />
-                      <span>{link.label}</span>
+                      <div className="flex items-center gap-3">
+                        <link.icon size={20} />
+                        <span>{link.label}</span>
+                      </div>
+                      {link.to === '/admin/deposits' && pendingDepositsCount > 0 && (
+                        <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                          {pendingDepositsCount}
+                        </span>
+                      )}
                     </NavLink>
                   ))}
                 </>

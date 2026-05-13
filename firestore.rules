@@ -19,18 +19,10 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Default deny
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // --- Users Collection ---
     match /users/{userId} {
-      // Users can read/write their own profile
-      allow get: if isOwner(userId) || isAdmin();
+      allow read, write: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isAdmin();
     }
 
     // --- Orders Collection ---

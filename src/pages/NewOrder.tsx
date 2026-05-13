@@ -111,9 +111,13 @@ export default function NewOrder() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !userData || !currentService) return;
+    if (!user || !userData || !currentService) {
+      console.warn("NewOrder: Cannot submit, missing data", { user: !!user, userData: !!userData, service: !!currentService });
+      return;
+    }
 
-    if (userData.balance < totalCost) {
+    const calculatedCost = (quantity / 1000) * currentService.pricePer1k;
+    if (userData.balance < calculatedCost - 0.0001) { // precision buffer
       setMessage({ type: 'error', text: 'Insufficient balance. Please add funds.' });
       return;
     }
@@ -124,7 +128,9 @@ export default function NewOrder() {
     }
 
     setSubmitting(true);
+    setMessage(null);
     try {
+      console.log("NewOrder: Starting transaction for order...");
       await runTransaction(db, async (transaction) => {
         const userRef = doc(db, 'users', user.uid);
         const userDoc = await transaction.get(userRef);
@@ -133,16 +139,18 @@ export default function NewOrder() {
         const currentBalance = userDoc.data().balance || 0;
         
         // Final balance check inside transaction
-        if (currentBalance < totalCost) {
+        if (currentBalance < calculatedCost - 0.0001) {
             throw new Error("Insufficient funds for this order.");
         }
 
         const newOrderData = {
           userId: user.uid,
+          userEmail: user.email,
           serviceId: selectedService,
+          serviceName: currentService.name,
           link,
           quantity,
-          charge: Number(totalCost.toFixed(4)),
+          charge: Number(calculatedCost.toFixed(4)),
           status: 'pending',
           createdAt: serverTimestamp(),
         };
@@ -151,9 +159,11 @@ export default function NewOrder() {
         transaction.set(orderRef, newOrderData);
 
         transaction.update(userRef, {
-            balance: Number((currentBalance - totalCost).toFixed(4))
+            balance: Number((currentBalance - calculatedCost).toFixed(4))
         });
       });
+      
+      console.log("NewOrder: Success");
       
       setMessage({ type: 'success', text: 'Order placed successfully!' });
       setLink('');

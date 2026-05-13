@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, orderBy, getDoc, doc, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy, doc, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { motion } from 'motion/react';
@@ -26,34 +26,33 @@ export default function Home() {
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const settingsSnap = await getDoc(doc(db, 'settings', 'site'));
-        if (settingsSnap.exists()) {
-          setSettings(settingsSnap.data() as SiteSettings);
-        }
+    const unsubSite = onSnapshot(doc(db, 'settings', 'site'), (snap) => {
+      if (snap.exists()) setSettings(snap.data() as SiteSettings);
+    });
 
-        const pageSnap = await getDoc(doc(db, 'settings', 'pages'));
-        if (pageSnap.exists()) {
-            setPageSettings(pageSnap.data());
-        }
+    const unsubPages = onSnapshot(doc(db, 'settings', 'pages'), (snap) => {
+      if (snap.exists()) setPageSettings(snap.data());
+      setLoading(false);
+    });
 
-        if (user) {
-            const ordersSnap = await getDocs(query(
-                collection(db, 'orders'), 
-                where('userId', '==', user.uid),
-                orderBy('createdAt', 'desc'),
-                limit(5)
-            ));
-            setRecentOrders(ordersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }
-      } catch (err) {
-        console.error("Home fetchData error:", err);
-      } finally {
-        setLoading(false);
-      }
+    let unsubOrders = () => {};
+    if (user) {
+      const q = query(
+        collection(db, 'orders'),
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc'),
+        limit(5)
+      );
+      unsubOrders = onSnapshot(q, (snap) => {
+        setRecentOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+    }
+
+    return () => {
+      unsubSite();
+      unsubPages();
+      unsubOrders();
     };
-    fetchData();
   }, [user]);
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>;

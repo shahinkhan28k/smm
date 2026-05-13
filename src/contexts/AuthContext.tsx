@@ -41,39 +41,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           let userDoc;
           try {
             userDoc = await getDoc(userDocRef);
+            console.log("Auth: Fetched user doc for " + user.uid + ", exists: " + userDoc.exists());
           } catch (e) {
-            console.error("Auth: Failed to get user doc:", e);
+            console.error("Auth: Failed to get user doc for " + user.uid + ":", e);
             // Don't throw here, let logic continue if possible
           }
           
           if (!userDoc || !userDoc.exists()) {
+            const isAdminEmail = user.email?.toLowerCase() === 'shahinkhan28w@gmail.com' || user.email?.toLowerCase() === 'shahinkhan28a@gmail.com' || user.uid === 'gjPrlGqFSPUCTer98iEz6xPPc1P2';
             const newUserData: UserData = {
               uid: user.uid,
               email: user.email || '',
               balance: 0,
-              role: (user.email?.toLowerCase() === 'shahinkhan28w@gmail.com' || user.email?.toLowerCase() === 'shahinkhan28a@gmail.com' || user.uid === 'wh4zeA8S61Rf4fQ8Im3vo7sW6d03') ? 'admin' : 'user',
+              role: isAdminEmail ? 'admin' : 'user',
               displayName: user.displayName || 'User',
             };
+            console.log("Auth: Creating new profile for UID:", user.uid, "Role:", newUserData.role);
             try {
               await setDoc(userDocRef, newUserData);
               setUserData(newUserData);
             } catch (e) {
-               console.error("Auth: Failed to create user profile:", e);
+               console.error("Auth: Failed to create user profile profile:", e);
                // If we can't create doc, still allow user in with basic data fallback
                setUserData(newUserData);
             }
           } else {
             const existingData = userDoc.data() as UserData;
+            console.log("Auth: Found existing profile", existingData.role);
             if (existingData.balance === undefined) existingData.balance = 0;
             
-            // Auto-promote specified admins
-            const isAdminEmail = user.email?.toLowerCase() === 'shahinkhan28w@gmail.com' || user.email?.toLowerCase() === 'shahinkhan28a@gmail.com';
+            const isAdminEmail = user.email?.toLowerCase() === 'shahinkhan28w@gmail.com' || user.email?.toLowerCase() === 'shahinkhan28a@gmail.com' || user.uid === 'gjPrlGqFSPUCTer98iEz6xPPc1P2';
             if (isAdminEmail && existingData.role !== 'admin') {
               try {
                 await setDoc(userDocRef, { role: 'admin' }, { merge: true });
                 existingData.role = 'admin';
+                console.log("Auth: Profile promoted to admin successfully");
               } catch (e) {
-                console.warn("Auth: Admin sync failed:", e);
+                console.warn("Auth: Admin promotion failed:", e);
               }
             }
             setUserData(existingData);

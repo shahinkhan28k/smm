@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Wallet, Smartphone, CreditCard, ChevronRight, CheckCircle2, Clock, Info } from 'lucide-react';
+import { Wallet, Smartphone, CreditCard, ChevronRight, CheckCircle2, Clock, Info, History, AlertCircle, X } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { doc, onSnapshot, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -16,6 +16,7 @@ export default function AddFunds() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300); // 5 minutes timer
+  const [transactions, setTransactions] = useState<any[]>([]);
 
   useEffect(() => {
     const unsubPages = onSnapshot(doc(db, 'settings', 'pages'), (doc) => {
@@ -24,11 +25,26 @@ export default function AddFunds() {
     const unsubSite = onSnapshot(doc(db, 'settings', 'site'), (doc) => {
         if (doc.exists()) setSiteSettings(doc.data());
     });
+    
+    let unsubTransactions = () => {};
+    if (userData?.uid) {
+      const q = query(
+        collection(db, 'transactions'),
+        where('userId', '==', userData.uid),
+        where('type', '==', 'deposit'),
+        orderBy('createdAt', 'desc')
+      );
+      unsubTransactions = onSnapshot(q, (snapshot) => {
+        setTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+    }
+
     return () => {
       unsubPages();
       unsubSite();
+      unsubTransactions();
     };
-  }, []);
+  }, [userData?.uid]);
 
   useEffect(() => {
     if (timeLeft > 0) {
@@ -47,22 +63,30 @@ export default function AddFunds() {
 
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'transactions'), {
+      console.log("AddFunds: Submitting transaction request...");
+      const transData = {
         userId: userData.uid,
         userEmail: userData.email,
-        amount: amount,
+        amount: Number(amount),
         method: method.toUpperCase(),
-        transactionId: transactionId,
+        transactionId: transactionId.trim(),
         type: 'deposit',
         status: 'pending',
         createdAt: serverTimestamp()
-      });
+      };
+      
+      await addDoc(collection(db, 'transactions'), transData);
+      console.log("AddFunds: Deposit request submitted successfully");
       setSuccess(true);
       setAmount(0);
       setTransactionId('');
-    } catch (err) {
-      console.error(err);
-      alert('Failed to submit request');
+    } catch (err: any) {
+      console.error("AddFunds Error:", err);
+      let errorMsg = 'Failed to submit request. Please try again.';
+      if (err.message?.includes('permission')) {
+          errorMsg = 'Permission denied. Please ensure you are logged in correctly.';
+      }
+      alert(errorMsg);
     } finally {
       setSubmitting(false);
     }
@@ -81,26 +105,6 @@ export default function AddFunds() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (success) {
-    return (
-      <div className="max-w-md mx-auto py-20 text-center space-y-6">
-        <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto">
-          <CheckCircle2 size={40} />
-        </div>
-        <div>
-          <h2 className="text-3xl font-black text-gray-900 uppercase">Request Sent!</h2>
-          <p className="text-gray-500 font-bold mt-2">Admin will review your deposit shortly.</p>
-        </div>
-        <button 
-          onClick={() => setSuccess(false)}
-          className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs"
-        >
-          Send Another Request
-        </button>
-      </div>
-    );
-  }
-
   const currentNumbers = siteSettings?.paymentNumbers?.[method] || '';
   const numbersArray = currentNumbers.split(',').map((n: string) => n.trim()).filter((n: string) => n);
 
@@ -110,6 +114,33 @@ export default function AddFunds() {
         <h1 className="text-3xl font-black text-gray-900 uppercase tracking-tighter mb-2">Automated Add Funds</h1>
         <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.2em]">Select method and send request</p>
       </div>
+
+      <AnimatePresence>
+        {success && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="bg-green-50 border border-green-100 p-6 rounded-[32px] flex items-center justify-between"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-green-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-green-100">
+                <CheckCircle2 size={24} />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-green-900 uppercase tracking-tight">Deposit Request Submitted!</h4>
+                <p className="text-xs text-green-700 font-bold">Admin will review your request shortly. Check history below.</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setSuccess(false)}
+              className="text-green-600 hover:bg-green-100 p-2 rounded-xl transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left: Methods */}
@@ -216,6 +247,88 @@ export default function AddFunds() {
                 </button>
               </div>
             </form>
+          </div>
+
+          {/* Deposit History */}
+          <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-8 border-b border-gray-50 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-gray-50 text-gray-400 rounded-2xl flex items-center justify-center">
+                  <History size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight">Recent Deposits</h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your payment history</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-gray-50/50">
+                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Date / TrxID</th>
+                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Method</th>
+                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
+                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {transactions.map((tx) => (
+                    <motion.tr 
+                      layout
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      key={tx.id} 
+                      className="hover:bg-gray-50/50 transition-colors"
+                    >
+                      <td className="px-8 py-5">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-gray-900">{tx.createdAt?.toDate?.()?.toLocaleDateString() || 'Just now'}</span>
+                          <span className="text-[10px] font-mono text-gray-400 uppercase">{tx.transactionId}</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-5">
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "w-2 h-2 rounded-full",
+                            tx.method === 'BKASH' ? 'bg-[#E2136E]' : 
+                            tx.method === 'NAGAD' ? 'bg-[#F7941E]' : 
+                            tx.method === 'ROCKET' ? 'bg-[#8B338A]' : 'bg-gray-400'
+                          )} />
+                          <span className="text-xs font-black text-gray-700 uppercase">{tx.method}</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-5">
+                        <span className="text-sm font-black text-gray-900">${tx.amount.toFixed(2)}</span>
+                      </td>
+                      <td className="px-8 py-5">
+                        <div className="flex items-center gap-2">
+                          {tx.status === 'pending' && <Clock size={12} className="text-orange-500" />}
+                          {tx.status === 'completed' && <CheckCircle2 size={12} className="text-green-500" />}
+                          {tx.status === 'rejected' && <AlertCircle size={12} className="text-red-500" />}
+                          <span className={cn(
+                            "text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg",
+                            tx.status === 'pending' ? 'bg-orange-50 text-orange-600' :
+                            tx.status === 'completed' ? 'bg-green-50 text-green-600' :
+                            'bg-red-50 text-red-600'
+                          )}>
+                            {tx.status}
+                          </span>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))}
+                  {transactions.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-8 py-20 text-center">
+                        <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">No transaction history found</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
