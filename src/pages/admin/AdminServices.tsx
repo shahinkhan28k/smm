@@ -122,7 +122,15 @@ export default function AdminServices() {
       if (!pDoc.exists()) throw new Error('Provider not found');
       const pData = pDoc.data();
 
-      const response = await fetch(`/api/provider/services?apiUrl=${encodeURIComponent(pData.apiUrl)}&apiKey=${encodeURIComponent(pData.apiKey)}`);
+      const response = await fetch('/api/provider/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiUrl: pData.apiUrl,
+          apiKey: pData.apiKey,
+          action: 'services'
+        })
+      });
       if (!response.ok) throw new Error('API fetch failed');
       
       const externalServices = await response.json();

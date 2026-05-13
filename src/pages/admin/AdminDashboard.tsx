@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { motion } from 'motion/react';
-import { Users, ShoppingCart, Wallet, MessageSquare, ArrowUpRight, TrendingUp } from 'lucide-react';
+import { Users, ShoppingCart, Wallet, MessageSquare, ArrowUpRight, TrendingUp, RefreshCw, Server } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -17,8 +17,49 @@ export default function AdminDashboard() {
     pendingDeposits: 0
   });
   const [loading, setLoading] = useState(true);
+  const [apiBalances, setApiBalances] = useState<{name: string, balance: string, currency: string}[]>([]);
+  const [fetchingBalances, setFetchingBalances] = useState(false);
+
+  const fetchApiBalances = async () => {
+    setFetchingBalances(true);
+    try {
+      const providersSnap = await getDocs(collection(db, 'providers'));
+      const balancesList: any[] = [];
+      
+      for (const pDoc of providersSnap.docs) {
+        const pData = pDoc.data();
+        try {
+          const res = await fetch('/api/provider/proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              apiUrl: pData.apiUrl,
+              apiKey: pData.apiKey,
+              action: 'balance'
+            })
+          });
+          const data = await res.json();
+          if (data.balance) {
+            balancesList.push({
+              name: pData.name,
+              balance: data.balance,
+              currency: data.currency || 'USD'
+            });
+          }
+        } catch (e) {
+          console.error(`Failed to fetch balance for ${pData.name}`, e);
+        }
+      }
+      setApiBalances(balancesList);
+    } catch (err) {
+      console.error("Error fetching providers:", err);
+    } finally {
+      setFetchingBalances(false);
+    }
+  };
 
   useEffect(() => {
+    fetchApiBalances();
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
       const usersData = snap.docs.map(doc => doc.data());
       const totalUserBalance = usersData.reduce((acc, data) => acc + (data.balance || 0), 0);
@@ -142,27 +183,59 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white rounded-3xl border border-gray-100 p-8">
-          <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-6">Recent Activity</h3>
-          <div className="space-y-6">
-            <p className="text-center py-12 text-gray-400 font-medium">Activity feed coming soon...</p>
+        <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight">API Provider Balances</h3>
+            <button 
+              onClick={fetchApiBalances}
+              disabled={fetchingBalances}
+              className="p-2 hover:bg-gray-100 rounded-xl transition-all disabled:opacity-50"
+            >
+              <RefreshCw size={20} className={`text-indigo-600 ${fetchingBalances ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            {apiBalances.length === 0 && !fetchingBalances ? (
+              <div className="text-center py-8">
+                <Server size={40} className="mx-auto text-gray-200 mb-2" />
+                <p className="text-gray-400 font-bold uppercase text-xs tracking-widest">No API providers connected</p>
+              </div>
+            ) : (
+              apiBalances.map((prov, i) => (
+                <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
+                      <Server size={16} />
+                    </div>
+                    <span className="font-bold text-gray-700">{prov.name}</span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-black text-indigo-600">{prov.balance} <span className="text-[10px] text-gray-400">{prov.currency}</span></p>
+                  </div>
+                </div>
+              ))
+            )}
+            {fetchingBalances && apiBalances.length === 0 && (
+              <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>
+            )}
           </div>
         </div>
-        
+
         <div className="bg-white rounded-3xl border border-gray-100 p-8">
           <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-6">System Health</h3>
           <div className="space-y-4">
-             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-               <span className="font-bold text-gray-600">Database</span>
-               <span className="text-green-500 font-black uppercase text-xs">Operational</span>
+             <div className="flex items-center justify-between p-4 bg-green-50/50 rounded-2xl border border-green-100">
+               <span className="font-bold text-green-700">Database (Firestore)</span>
+               <span className="text-green-600 font-black uppercase text-[10px] tracking-widest">Operational</span>
              </div>
-             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-               <span className="font-bold text-gray-600">Storage</span>
-               <span className="text-green-500 font-black uppercase text-xs">Operational</span>
+             <div className="flex items-center justify-between p-4 bg-green-50/50 rounded-2xl border border-green-100">
+               <span className="font-bold text-green-700">Proxy Server (Node.js)</span>
+               <span className="text-green-600 font-black uppercase text-[10px] tracking-widest">Operational</span>
              </div>
-             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-               <span className="font-bold text-gray-600">Auth Service</span>
-               <span className="text-green-500 font-black uppercase text-xs">Operational</span>
+             <div className="flex items-center justify-between p-4 bg-green-50/50 rounded-2xl border border-green-100">
+               <span className="font-bold text-green-700">Auth Service</span>
+               <span className="text-green-600 font-black uppercase text-[10px] tracking-widest">Operational</span>
              </div>
           </div>
         </div>

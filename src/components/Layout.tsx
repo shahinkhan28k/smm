@@ -117,67 +117,67 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed top-0 left-0 bottom-0 w-72 bg-white z-[60] shadow-2xl flex flex-col"
+            className="fixed top-0 left-0 bottom-0 w-72 bg-[#1e293b] text-slate-300 z-[60] shadow-2xl flex flex-col"
           >
-            <div className="h-16 flex items-center justify-between px-6 border-b border-gray-100">
+            <div className="h-16 flex items-center justify-between px-6 border-b border-slate-700/50">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-blue-900/20">
                   <Zap size={18} fill="currentColor" />
                 </div>
-                <span className="font-extrabold text-lg uppercase tracking-wider whitespace-nowrap">Natok Boost</span>
+                <span className="font-black text-lg uppercase tracking-wider whitespace-nowrap text-white">Natok Boost</span>
               </div>
               <button 
                 onClick={() => setIsSidebarOpen(false)}
-                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                className="p-2 hover:bg-slate-700 rounded-xl transition-colors"
               >
-                <X size={20} className="text-gray-400" />
+                <X size={20} className="text-slate-400" />
               </button>
             </div>
 
-            <div className="p-4 flex-1 overflow-y-auto space-y-1">
+            <div className="p-4 flex-1 overflow-y-auto space-y-1 custom-scrollbar">
               {!isAdminRoute ? (
                 <>
-                  <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">User Menu</p>
+                  <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 mt-2">Personal</p>
                   {navLinks.map((link) => (
                     <NavLink
                       key={link.to}
                       to={link.to}
                       onClick={() => setIsSidebarOpen(false)}
                       className={({ isActive }) => `
-                        flex items-center gap-3 px-4 py-3.5 rounded-2xl font-bold transition-all
+                        flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all
                         ${isActive 
-                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' 
-                          : 'text-gray-500 hover:bg-gray-50 hover:text-blue-600'
+                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30' 
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                         }
                       `}
                     >
-                      <link.icon size={20} />
-                      <span>{link.label}</span>
+                      <link.icon size={18} />
+                      <span className="text-sm">{link.label}</span>
                     </NavLink>
                   ))}
                 </>
               ) : (
                 <>
-                  <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Admin Control Center</p>
+                  <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 mt-2">Admin Control</p>
                   {adminLinks.map((link) => (
                     <NavLink
                       key={link.to}
                       to={link.to}
                       onClick={() => setIsSidebarOpen(false)}
                       className={({ isActive }) => `
-                        flex items-center justify-between px-4 py-3.5 rounded-2xl font-bold transition-all
+                        flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all
                         ${isActive 
-                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' 
-                          : 'text-gray-500 hover:bg-indigo-50 hover:text-indigo-600'
+                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/30' 
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                         }
                       `}
                     >
                       <div className="flex items-center gap-3">
-                        <link.icon size={20} />
-                        <span>{link.label}</span>
+                        <link.icon size={18} />
+                        <span className="text-sm">{link.label}</span>
                       </div>
                       {link.to === '/admin/deposits' && pendingDepositsCount > 0 && (
-                        <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                        <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm">
                           {pendingDepositsCount}
                         </span>
                       )}
@@ -187,19 +187,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            <div className="p-4 border-t border-gray-100 space-y-4">
+            <div className="p-4 border-t border-slate-700/50 space-y-4">
               {userData && (
-                <div className="bg-blue-50 p-4 rounded-2xl space-y-2">
-                  <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">Available Balance</p>
-                  <p className="text-2xl font-black text-blue-700">${Number(userData.balance || 0).toFixed(2)}</p>
+                <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-2xl space-y-1">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Balance</p>
+                  <p className="text-xl font-black text-blue-400">${Number(userData.balance || 0).toFixed(2)}</p>
                 </div>
               )}
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl font-bold text-red-500 hover:bg-red-50 transition-all"
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-red-400 hover:bg-red-950/30 transition-all border border-transparent hover:border-red-900/30"
               >
-                <LogOut size={20} />
-                <span>Sign Out</span>
+                <LogOut size={18} />
+                <span className="text-sm">Sign Out</span>
               </button>
             </div>
           </motion.aside>

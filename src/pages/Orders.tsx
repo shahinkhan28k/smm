@@ -25,7 +25,8 @@ export default function Orders() {
 
     const q = query(
       collection(db, 'orders'),
-      where('userId', '==', user.uid)
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc')
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Wallet, Smartphone, CreditCard, ChevronRight, CheckCircle2, Clock, Info, History, AlertCircle, X } from 'lucide-react';
+import { Wallet, Smartphone, CreditCard, ChevronRight, CheckCircle2, Clock, Info, History, AlertCircle, X, Copy, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -17,6 +17,13 @@ export default function AddFunds() {
   const [success, setSuccess] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300); // 5 minutes timer
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(text);
+    setTimeout(() => setCopied(null), 2000);
+  };
 
   useEffect(() => {
     const unsubPages = onSnapshot(doc(db, 'settings', 'pages'), (doc) => {
@@ -84,6 +91,8 @@ export default function AddFunds() {
       await addDoc(collection(db, 'transactions'), transData);
       console.log("AddFunds: Deposit request submitted successfully");
       setSuccess(true);
+      // Detailed notification text
+      alert('অর্ডারটি সাবমিট হয়েছে। কিছুক্ষণ অপেক্ষা করুন, এডমিন প্যানেল থেকে এটি রিভিউ করে আপনার ব্যালেন্স যোগ করা হবে।');
       setAmount(0);
       setTransactionId('');
     } catch (err: any) {
@@ -196,12 +205,27 @@ export default function AddFunds() {
                     </div>
                  </div>
               </div>
-              <div className="bg-gray-50 px-6 py-4 rounded-3xl border border-gray-100">
-                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 text-center">Numbers to Pay</p>
-                 <div className="flex flex-wrap gap-2 justify-center">
+              <div className="bg-gray-50/80 p-5 rounded-3xl border border-gray-100 min-w-[240px] shadow-inner">
+                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Numbers to Pay ({method.toUpperCase()})</p>
+                 <div className="space-y-2">
                     {numbersArray.length > 0 ? numbersArray.map((num: string, idx: number) => (
-                      <span key={idx} className="text-sm font-black text-gray-900 bg-white px-3 py-1 rounded-xl border border-gray-200">{num}</span>
-                    )) : <span className="text-xs font-bold text-gray-400 italic">No numbers added yet</span>}
+                      <div key={idx} className="flex items-center justify-between gap-3 bg-white px-4 py-3 rounded-2xl border border-gray-100 shadow-sm">
+                        <span className="text-sm font-black text-gray-900 font-mono tracking-wider">{num}</span>
+                        <button 
+                          onClick={() => copyToClipboard(num)}
+                          className={cn(
+                            "p-2 rounded-xl transition-all",
+                            copied === num ? "bg-green-100 text-green-600" : "bg-gray-50 text-gray-400 hover:bg-gray-100"
+                          )}
+                        >
+                          {copied === num ? <Check size={14} /> : <Copy size={14} />}
+                        </button>
+                      </div>
+                    )) : (
+                      <div className="text-center py-2">
+                        <span className="text-xs font-bold text-gray-400 italic">No numbers added yet</span>
+                      </div>
+                    )}
                  </div>
               </div>
             </div>

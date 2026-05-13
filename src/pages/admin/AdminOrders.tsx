@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingCart, CheckCircle2, Clock, XCircle, Loader2, Search, Filter, Eye } from 'lucide-react';
+import { ShoppingCart, CheckCircle2, Clock, XCircle, Loader2, Search, Filter, Eye, RefreshCw, ArrowUpRight } from 'lucide-react';
 
 interface Order {
   id: string;
@@ -23,14 +23,116 @@ export default function AdminOrders() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
+  const [processingSync, setProcessingSync] = useState<string | null>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
+
   useEffect(() => {
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
+      setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
+
+  const syncOrderStatus = async (order: any) => {
+    if (!order.providerOrderId || !order.providerId) return;
+    setProcessingSync(order.id);
+    try {
+      const pDoc = await getDoc(doc(db, 'providers', order.providerId));
+      if (!pDoc.exists()) throw new Error('Provider not found');
+      const pData = pDoc.data();
+
+      const response = await fetch('/api/provider/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiUrl: pData.apiUrl,
+          apiKey: pData.apiKey,
+          action: 'status',
+          order: order.providerOrderId
+        })
+      });
+
+      const data = await response.json();
+      if (data.status) {
+        await updateDoc(doc(db, 'orders', order.id), {
+          status: data.status.replace(' ', '_').toLowerCase(),
+          apiStatusResponse: data
+        });
+      }
+    } catch (err: any) {
+      console.error("Sync Error:", err);
+    } finally {
+      setProcessingSync(null);
+    }
+  };
+
+  const syncAllActiveOrders = async () => {
+    const activeOrders = orders.filter(o => 
+      ['pending', 'processing', 'in_progress', 'pending_provider'].includes(o.status) && 
+      (o as any).providerOrderId
+    );
+    if (activeOrders.length === 0) return alert('No active provider orders to sync.');
+    
+    setSyncingAll(true);
+    let count = 0;
+    for (const order of activeOrders) {
+      await syncOrderStatus(order);
+      count++;
+    }
+    setSyncingAll(false);
+    alert(`Successfully synced ${count} orders.`);
+  };
+
+  const pushToProvider = async (order: any) => {
+    if (!order.providerId || !order.serviceId) return alert('No provider assigned to this service.');
+    setProcessingSync(order.id);
+    try {
+      const pDoc = await getDoc(doc(db, 'providers', order.providerId));
+      if (!pDoc.exists()) throw new Error('Provider config missing.');
+      const pData = pDoc.data();
+      
+      const sDoc = await getDoc(doc(db, 'services', order.serviceId));
+      const sData = sDoc.data();
+      const pServiceId = sData?.providerServiceId;
+      
+      if (!pServiceId) throw new Error('Provider Service ID not mapped.');
+
+      const res = await fetch('/api/provider/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiUrl: pData.apiUrl,
+          apiKey: pData.apiKey,
+          action: 'add',
+          service: pServiceId,
+          link: order.link,
+          quantity: order.quantity
+        })
+      });
+
+      const data = await res.json();
+      if (data.order) {
+        await updateDoc(doc(db, 'orders', order.id), {
+          providerOrderId: data.order,
+          status: 'processing',
+          apiResponse: data
+        });
+        alert('Order successfully pushed to provider! Provider ID: ' + data.order);
+      } else {
+        throw new Error(data.error || 'Provider rejected request');
+      }
+    } catch (err: any) {
+      alert('Push Failed: ' + err.message);
+      await updateDoc(doc(db, 'orders', order.id), {
+        status: 'error',
+        adminNote: 'Manual API Push Error: ' + err.message
+      });
+    } finally {
+      setProcessingSync(null);
+    }
+  };
 
   const updateStatus = async (orderId: string, newStatus: string) => {
     try {
@@ -61,9 +163,19 @@ export default function AdminOrders() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-black text-gray-900 uppercase tracking-tight">Order Management</h1>
-        <p className="text-gray-500 font-medium">Monitor and update system orders</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-gray-900 uppercase tracking-tight">Order Management</h1>
+          <p className="text-gray-500 font-medium">Monitor and update system orders</p>
+        </div>
+        <button
+          onClick={syncAllActiveOrders}
+          disabled={syncingAll}
+          className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
+        >
+          <RefreshCw size={20} className={syncingAll ? 'animate-spin' : ''} />
+          <span>Sync All Active</span>
+        </button>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4">
@@ -77,12 +189,12 @@ export default function AdminOrders() {
             className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
           />
         </div>
-        <div className="flex gap-2 bg-white p-1 rounded-2xl shadow-sm border border-gray-100">
-          {['all', 'pending', 'processing', 'completed', 'canceled'].map(status => (
+        <div className="flex gap-2 bg-white p-1 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+          {['all', 'pending', 'processing', 'completed', 'canceled', 'error'].map(status => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
-              className={`px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${
+              className={`px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all whitespace-nowrap ${
                 statusFilter === status 
                   ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' 
                   : 'text-gray-400 hover:text-indigo-600'
@@ -141,16 +253,40 @@ export default function AdminOrders() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <select 
-                        value={order.status}
-                        onChange={(e) => updateStatus(order.id, e.target.value)}
-                        className="bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="processing">Processing</option>
-                        <option value="completed">Completed</option>
-                        <option value="canceled">Canceled</option>
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <select 
+                          value={order.status}
+                          onChange={(e) => updateStatus(order.id, e.target.value)}
+                          className="bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="processing">Processing</option>
+                          <option value="completed">Completed</option>
+                          <option value="canceled">Canceled</option>
+                          <option value="error">Error</option>
+                        </select>
+                        {(order as any).providerOrderId ? (
+                          <button 
+                            onClick={() => syncOrderStatus(order)}
+                            disabled={processingSync === order.id}
+                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            title="Sync Status from API"
+                          >
+                            <RefreshCw size={14} className={processingSync === order.id ? 'animate-spin' : ''} />
+                          </button>
+                        ) : (
+                          (order as any).providerId && (
+                            <button 
+                              onClick={() => pushToProvider(order)}
+                              disabled={processingSync === order.id}
+                              className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
+                              title="Push manually to Provider"
+                            >
+                              <ArrowUpRight size={14} className={processingSync === order.id ? 'animate-spin' : ''} />
+                            </button>
+                          )
+                        )}
+                      </div>
                     </td>
                   </motion.tr>
                 ))}

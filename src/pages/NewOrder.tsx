@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, where, orderBy, addDoc, serverTimestamp, getDoc, doc, runTransaction } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy, addDoc, serverTimestamp, getDoc, doc, runTransaction, updateDoc, limit } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingCart, Info, Zap, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { NavLink } from 'react-router-dom';
 
 interface Category {
   id: string;
@@ -19,6 +20,7 @@ interface Service {
   minQuantity: number;
   maxQuantity: number;
   description: string;
+  providerId?: string;
   serviceType?: string;
   refill?: boolean;
   cancelPossible?: boolean;
@@ -38,6 +40,7 @@ export default function NewOrder() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [filteredServices, setFilteredServices] = useState<Service[]>([]);
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
   
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedService, setSelectedService] = useState<string>('');
@@ -74,10 +77,24 @@ export default function NewOrder() {
       setLoading(false);
     });
 
+    let unsubRecent = () => {};
+    if (user?.uid) {
+      const q = query(
+        collection(db, 'orders'),
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc'),
+        limit(5)
+      );
+      unsubRecent = onSnapshot(q, (snap) => {
+        setRecentOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+    }
+
     return () => {
       unsubPages();
       unsubCats();
       unsubServs();
+      unsubRecent();
     };
   }, []);
 
@@ -116,7 +133,7 @@ export default function NewOrder() {
     setMessage(null);
     try {
       console.log("NewOrder: Starting transaction for order...");
-      await runTransaction(db, async (transaction) => {
+      const orderId = await runTransaction(db, async (transaction) => {
         const userRef = doc(db, 'users', user.uid);
         const userDoc = await transaction.get(userRef);
         
@@ -146,11 +163,57 @@ export default function NewOrder() {
         transaction.update(userRef, {
             balance: Number((currentBalance - calculatedCost).toFixed(4))
         });
+        
+        return orderRef.id;
       });
       
-      console.log("NewOrder: Success");
+      console.log("NewOrder: Firestore transaction completed");
+
+      // Now forward to provider if applicable
+      if (currentService.providerId && (currentService as any).providerServiceId) {
+        try {
+          const pDoc = await getDoc(doc(db, 'providers', currentService.providerId));
+          if (pDoc.exists()) {
+            const pData = pDoc.data();
+            const proxyRes = await fetch('/api/provider/proxy', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                apiUrl: pData.apiUrl,
+                apiKey: pData.apiKey,
+                action: 'add',
+                service: (currentService as any).providerServiceId,
+                link: link,
+                quantity: quantity
+              })
+            });
+            
+            const proxyData = await proxyRes.json();
+            if (proxyData.order) {
+              // Successfully forwarded to provider
+              await updateDoc(doc(db, 'orders', orderId), {
+                providerOrderId: proxyData.order,
+                status: 'pending_provider', // or keep as pending
+                apiResponse: proxyData
+              });
+            } else if (proxyData.error) {
+              console.error("Provider rejected order:", proxyData.error);
+              await updateDoc(doc(db, 'orders', orderId), {
+                status: 'error',
+                adminNote: 'Provider error: ' + (proxyData.error || 'Unknown error')
+              });
+            }
+          }
+        } catch (apiErr) {
+          console.error("Failed to forward order to provider:", apiErr);
+          // Still success for user as balance was deducted and order recorded
+        }
+      }
       
-      setMessage({ type: 'success', text: 'Order placed successfully!' });
+      setMessage({ 
+        type: 'success', 
+        text: `অর্ডারটি সাবমিট হয়েছে! অর্ডার আইডি: ${orderId.slice(0,8)}. কিছুক্ষণ অপেক্ষা করুন, এটি প্রসেসিং হচ্ছে।`
+      });
       setLink('');
       setQuantity(0);
     } catch (err: any) {
@@ -337,6 +400,45 @@ export default function NewOrder() {
                 )}
              </div>
           </div>
+        </div>
+      </div>
+      <div className="bg-white rounded-[32px] border border-gray-100 p-8 shadow-sm">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight">Your Recent Orders</h3>
+          <NavLink to="/orders" className="text-xs font-black text-blue-600 uppercase tracking-widest hover:underline">View All</NavLink>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-gray-50">
+                <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Order ID</th>
+                <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Service</th>
+                <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {recentOrders.map(order => (
+                <tr key={order.id}>
+                  <td className="py-4 text-[10px] font-mono text-gray-400">#{order.id.slice(0, 8)}</td>
+                  <td className="py-4 text-xs font-bold text-gray-700 truncate max-w-[200px]">{order.serviceName}</td>
+                  <td className="py-4 text-right">
+                    <span className={cn(
+                      "text-[9px] font-black uppercase px-2 py-0.5 rounded-lg",
+                      order.status === 'completed' ? 'bg-green-50 text-green-600' :
+                      order.status === 'pending' ? 'bg-gray-50 text-gray-400' : 'bg-blue-50 text-blue-600'
+                    )}>
+                      {order.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {recentOrders.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="py-8 text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest">No recent orders found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

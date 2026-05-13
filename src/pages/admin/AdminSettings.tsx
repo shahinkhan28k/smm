@@ -203,7 +203,15 @@ export default function AdminSettings() {
     setSyncing(provider.id);
     try {
       console.log(`Starting sync for ${provider.name}...`);
-      const response = await fetch(`/api/provider/services?apiUrl=${encodeURIComponent(provider.apiUrl)}&apiKey=${encodeURIComponent(provider.apiKey)}`);
+      const response = await fetch('/api/provider/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiUrl: provider.apiUrl,
+          apiKey: provider.apiKey,
+          action: 'services'
+        })
+      });
       const data = await response.json();
       
       if (!response.ok) {
