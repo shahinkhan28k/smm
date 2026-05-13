@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, doc, updateDoc, increment, runTransaction, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { db, auth } from '../../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { Wallet, Check, X, Search, Clock, User as UserIcon, Bell } from 'lucide-react';
 
@@ -20,6 +20,37 @@ export default function AdminDeposits() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [processProgress, setProcessProgress] = useState(0);
+
+  const processWithDelay = async (actionFn: () => Promise<void>) => {
+    setProcessProgress(0);
+    // Start progress timer
+    const progressInterval = setInterval(() => {
+      setProcessProgress(prev => {
+        if (prev >= 95) return prev;
+        return prev + 1;
+      });
+    }, 45);
+
+    try {
+      const startTime = Date.now();
+      await actionFn();
+      const endTime = Date.now();
+      const elapsed = endTime - startTime;
+      const minDelay = 4500;
+
+      if (elapsed < minDelay) {
+        await new Promise(resolve => setTimeout(resolve, minDelay - elapsed));
+      }
+      setProcessProgress(100);
+    } finally {
+      clearInterval(progressInterval);
+      setTimeout(() => {
+        setProcessing(null);
+        setProcessProgress(0);
+      }, 500);
+    }
+  };
 
   useEffect(() => {
     const q = query(
@@ -43,48 +74,55 @@ export default function AdminDeposits() {
   const handleApprove = async (request: DepositRequest) => {
     if (!confirm(`Are you sure you want to approve $${request.amount} for user ID ${request.userId}?`)) return;
     setProcessing(request.id);
-    try {
-      await runTransaction(db, async (transaction) => {
-        const userRef = doc(db, 'users', request.userId);
-        const transRef = doc(db, 'transactions', request.id);
-        
-        const userDoc = await transaction.get(userRef);
-        if (!userDoc.exists()) throw new Error("User does not exist!");
+    await processWithDelay(async () => {
+      try {
+        await runTransaction(db, async (transaction) => {
+          const userRef = doc(db, 'users', request.userId);
+          const transRef = doc(db, 'transactions', request.id);
+          
+          const userDoc = await transaction.get(userRef);
+          if (!userDoc.exists()) throw new Error("Target user profile not found in database!");
 
-        transaction.update(userRef, {
-          balance: increment(request.amount)
+          transaction.update(userRef, {
+            balance: increment(request.amount)
+          });
+          
+          transaction.update(transRef, {
+            status: 'completed',
+            updatedAt: new Date(),
+            processedBy: auth.currentUser?.email || 'admin'
+          });
         });
-        
-        transaction.update(transRef, {
-          status: 'completed',
-          updatedAt: new Date()
-        });
-      });
-      alert('Deposit approved successfully!');
-    } catch (err: any) {
-      console.error(err);
-      alert('Failed to approve: ' + err.message);
-    } finally {
-      setProcessing(null);
-    }
+      } catch (err: any) {
+        console.error("Approval Error:", err);
+        if (err.message?.includes('permissions') || err.message?.includes('Permission denied')) {
+           alert("সম্মানি এডমিন, আপনার একাউন্টে এডমিন পারমিশন নেই। দয়া করে আপনার প্রোফাইল চেক করুন অথবা ডেভেলপার এর সাথে যোগাযোগ করুন।");
+        } else {
+           alert('Error: ' + err.message);
+        }
+        throw err;
+      }
+    });
+    alert('Deposit approved successfully!');
   };
 
   const handleReject = async (request: DepositRequest) => {
     const reason = prompt('Enter rejection reason (optional):');
     if (reason === null) return;
     setProcessing(request.id);
-    try {
-      await updateDoc(doc(db, 'transactions', request.id), {
-        status: 'rejected',
-        adminNote: reason,
-        updatedAt: new Date()
-      });
-      alert('Deposit rejected.');
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setProcessing(null);
-    }
+    await processWithDelay(async () => {
+      try {
+        await updateDoc(doc(db, 'transactions', request.id), {
+          status: 'rejected',
+          adminNote: reason,
+          updatedAt: new Date()
+        });
+      } catch (err: any) {
+        console.error(err);
+        throw err;
+      }
+    });
+    alert('Deposit rejected.');
   };
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>;
@@ -116,6 +154,63 @@ export default function AdminDeposits() {
           />
         </div>
       </div>
+
+      <AnimatePresence>
+        {processing && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-sm bg-white rounded-[40px] p-10 text-center shadow-2xl"
+            >
+              <div className="relative w-24 h-24 mx-auto mb-8">
+                <svg className="w-full h-full rotate-[-90deg]">
+                  <circle
+                    cx="48"
+                    cy="48"
+                    r="45"
+                    fill="none"
+                    stroke="#F3F4F6"
+                    strokeWidth="6"
+                  />
+                  <motion.circle
+                    cx="48"
+                    cy="48"
+                    r="45"
+                    fill="none"
+                    stroke="#F59E0B"
+                    strokeWidth="6"
+                    strokeDasharray="283"
+                    animate={{ strokeDashoffset: 283 - (283 * processProgress) / 100 }}
+                    transition={{ duration: 0.2 }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center text-amber-500">
+                   <Bell size={32} className="animate-bounce" />
+                </div>
+              </div>
+              <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter mb-2">Processing Deposit</h3>
+              <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mb-6">Updating Ledger securely...</p>
+              
+              <div className="bg-gray-100 h-1 rounded-full overflow-hidden">
+                <motion.div 
+                  className="bg-amber-500 h-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${processProgress}%` }}
+                />
+              </div>
+              <p className="mt-4 text-[10px] font-black text-amber-600 uppercase tracking-widest">{processProgress}% Syncing</p>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Pending Requests */}

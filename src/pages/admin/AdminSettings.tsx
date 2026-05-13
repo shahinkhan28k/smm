@@ -38,6 +38,39 @@ export default function AdminSettings() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [saveProgress, setSaveProgress] = useState(0);
+
+  const saveWithDelay = async (saveFn: () => Promise<void>) => {
+    setSavingSettings(true);
+    setSaveProgress(0);
+    
+    // Start progress timer
+    const progressInterval = setInterval(() => {
+      setSaveProgress(prev => {
+        if (prev >= 95) return prev;
+        return prev + 1;
+      });
+    }, 45); // Roughly 4.5 seconds to reach 100%
+
+    try {
+      const startTime = Date.now();
+      await saveFn();
+      const endTime = Date.now();
+      const elapsed = endTime - startTime;
+      const minDelay = 4500; // 4.5 seconds delay as requested
+
+      if (elapsed < minDelay) {
+        await new Promise(resolve => setTimeout(resolve, minDelay - elapsed));
+      }
+      setSaveProgress(100);
+    } finally {
+      clearInterval(progressInterval);
+      setTimeout(() => {
+        setSavingSettings(false);
+        setSaveProgress(0);
+      }, 500);
+    }
+  };
 
   const [siteSettings, setSiteSettings] = useState<SiteSettings & { paymentNumbers?: any, supportLinks?: any }>({
     siteName: 'Natok Boost',
@@ -144,96 +177,92 @@ export default function AdminSettings() {
 
   const handleUpdateSiteSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavingSettings(true);
-    try {
-      console.log("AdminSettings: Updating site branding...", siteSettings);
-      const settingsRef = doc(db, 'settings', 'site');
-      const brandingData = {
-        siteName: siteSettings.siteName,
-        faviconUrl: siteSettings.faviconUrl,
-        bannerTitle: siteSettings.bannerTitle,
-        bannerText: siteSettings.bannerText,
-        bannerImage: siteSettings.bannerImage,
-        tabTitle: siteSettings.tabTitle
-      };
-      await setDoc(settingsRef, brandingData, { merge: true });
-      setIsEdited(false);
-      alert('Branding settings updated successfully!');
-    } catch (err: any) {
-      console.error("AdminSettings Branding Update Error:", err);
-      handleFirestoreError(err, OperationType.WRITE, 'settings/site');
-      alert('Failed to update branding: ' + err.message);
-    } finally {
-      setSavingSettings(false);
-    }
+    await saveWithDelay(async () => {
+      try {
+        console.log("AdminSettings: Updating site branding...", siteSettings);
+        const settingsRef = doc(db, 'settings', 'site');
+        const brandingData = {
+          siteName: siteSettings.siteName,
+          faviconUrl: siteSettings.faviconUrl,
+          bannerTitle: siteSettings.bannerTitle,
+          bannerText: siteSettings.bannerText,
+          bannerImage: siteSettings.bannerImage,
+          tabTitle: siteSettings.tabTitle
+        };
+        await setDoc(settingsRef, brandingData, { merge: true });
+        setIsEdited(false);
+      } catch (err: any) {
+        console.error("AdminSettings Branding Update Error:", err);
+        handleFirestoreError(err, OperationType.WRITE, 'settings/site');
+        throw err;
+      }
+    });
+    alert('Branding settings updated successfully!');
   };
 
   const handleUpdatePaymentInfo = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavingSettings(true);
-    try {
-      console.log("AdminSettings: Updating payment numbers...", siteSettings.paymentNumbers);
-      const settingsRef = doc(db, 'settings', 'site');
-      const paymentData = {
-        paymentNumbers: {
-          bkash: siteSettings.paymentNumbers?.bkash || '',
-          nagad: siteSettings.paymentNumbers?.nagad || '',
-          rocket: siteSettings.paymentNumbers?.rocket || '',
-          bank: siteSettings.paymentNumbers?.bank || ''
-        }
-      };
-      await setDoc(settingsRef, paymentData, { merge: true });
-      setIsEdited(false);
-      alert('Payment information updated successfully!');
-    } catch (err: any) {
-      console.error("AdminSettings Payment Update Error:", err);
-      handleFirestoreError(err, OperationType.WRITE, 'settings/site');
-      alert('Failed to update payments: ' + err.message);
-    } finally {
-      setSavingSettings(false);
-    }
+    await saveWithDelay(async () => {
+      try {
+        console.log("AdminSettings: Updating payment numbers...", siteSettings.paymentNumbers);
+        const settingsRef = doc(db, 'settings', 'site');
+        const paymentData = {
+          paymentNumbers: {
+            bkash: siteSettings.paymentNumbers?.bkash || '',
+            nagad: siteSettings.paymentNumbers?.nagad || '',
+            rocket: siteSettings.paymentNumbers?.rocket || '',
+            bank: siteSettings.paymentNumbers?.bank || ''
+          }
+        };
+        await setDoc(settingsRef, paymentData, { merge: true });
+        setIsEdited(false);
+      } catch (err: any) {
+        console.error("AdminSettings Payment Update Error:", err);
+        handleFirestoreError(err, OperationType.WRITE, 'settings/site');
+        throw err;
+      }
+    });
+    alert('Payment information updated successfully!');
   };
 
   const handleUpdateSupportInfo = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavingSettings(true);
-    try {
-      console.log("AdminSettings: Updating support links...", siteSettings.supportLinks);
-      const settingsRef = doc(db, 'settings', 'site');
-      const supportData = {
-        supportLinks: {
-          whatsapp: siteSettings.supportLinks?.whatsapp || '',
-          telegram: siteSettings.supportLinks?.telegram || ''
-        }
-      };
-      await setDoc(settingsRef, supportData, { merge: true });
-      setIsEdited(false);
-      alert('Support information updated successfully!');
-    } catch (err: any) {
-      console.error("AdminSettings Support Update Error:", err);
-      handleFirestoreError(err, OperationType.WRITE, 'settings/site');
-      alert('Failed to update support info: ' + err.message);
-    } finally {
-      setSavingSettings(false);
-    }
+    await saveWithDelay(async () => {
+      try {
+        console.log("AdminSettings: Updating support links...", siteSettings.supportLinks);
+        const settingsRef = doc(db, 'settings', 'site');
+        const supportData = {
+          supportLinks: {
+            whatsapp: siteSettings.supportLinks?.whatsapp || '',
+            telegram: siteSettings.supportLinks?.telegram || ''
+          }
+        };
+        await setDoc(settingsRef, supportData, { merge: true });
+        setIsEdited(false);
+      } catch (err: any) {
+        console.error("AdminSettings Support Update Error:", err);
+        handleFirestoreError(err, OperationType.WRITE, 'settings/site');
+        throw err;
+      }
+    });
+    alert('Support information updated successfully!');
   };
 
   const handleUpdatePageContent = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavingSettings(true);
-    try {
-      console.log("AdminSettings: Updating page content...", pageContent);
-      const pagesRef = doc(db, 'settings', 'pages');
-      await setDoc(pagesRef, pageContent, { merge: true });
-      setIsEdited(false);
-      alert('Page content updated successfully!');
-    } catch (err: any) {
-      console.error("AdminSettings Page Content Update Error:", err);
-      handleFirestoreError(err, OperationType.WRITE, 'settings/pages');
-      alert('Failed to update page content: ' + err.message);
-    } finally {
-      setSavingSettings(false);
-    }
+    await saveWithDelay(async () => {
+      try {
+        console.log("AdminSettings: Updating page content...", pageContent);
+        const pagesRef = doc(db, 'settings', 'pages');
+        await setDoc(pagesRef, pageContent, { merge: true });
+        setIsEdited(false);
+      } catch (err: any) {
+        console.error("AdminSettings Page Content Update Error:", err);
+        handleFirestoreError(err, OperationType.WRITE, 'settings/pages');
+        throw err;
+      }
+    });
+    alert('Page content updated successfully!');
   };
 
   const handleAddProvider = async (e: React.FormEvent) => {
@@ -619,7 +648,64 @@ export default function AdminSettings() {
         )}
       </motion.div>
 
-    <AnimatePresence>
+      <AnimatePresence>
+        {savingSettings && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-sm bg-white rounded-[40px] p-10 text-center shadow-2xl"
+            >
+              <div className="relative w-24 h-24 mx-auto mb-8">
+                <svg className="w-full h-full rotate-[-90deg]">
+                  <circle
+                    cx="48"
+                    cy="48"
+                    r="45"
+                    fill="none"
+                    stroke="#F3F4F6"
+                    strokeWidth="6"
+                  />
+                  <motion.circle
+                    cx="48"
+                    cy="48"
+                    r="45"
+                    fill="none"
+                    stroke="#4F46E5"
+                    strokeWidth="6"
+                    strokeDasharray="283"
+                    animate={{ strokeDashoffset: 283 - (283 * saveProgress) / 100 }}
+                    transition={{ duration: 0.2 }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <RefreshCw size={32} className="text-indigo-600 animate-spin" />
+                </div>
+              </div>
+              <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter mb-2">Saving Changes</h3>
+              <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mb-6">Updating Database securely...</p>
+              
+              <div className="bg-gray-100 h-1 rounded-full overflow-hidden">
+                <motion.div 
+                  className="bg-indigo-600 h-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${saveProgress}%` }}
+                />
+              </div>
+              <p className="mt-4 text-[10px] font-black text-indigo-600 uppercase tracking-widest">{saveProgress}% Ready</p>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {showAddModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
             <motion.div 

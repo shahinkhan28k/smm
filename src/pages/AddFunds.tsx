@@ -82,6 +82,7 @@ export default function AddFunds() {
       // Check for duplicate Transaction ID
       const qCheck = query(
         collection(db, 'transactions'),
+        where('userId', '==', userData.uid),
         where('transactionId', '==', transactionId.trim().toUpperCase())
       );
       const checkSnap = await getDocs(qCheck);
