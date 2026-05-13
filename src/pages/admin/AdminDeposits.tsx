@@ -19,6 +19,7 @@ export default function AdminDeposits() {
   const [requests, setRequests] = useState<DepositRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const q = query(
@@ -88,14 +89,32 @@ export default function AdminDeposits() {
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>;
 
-  const pending = requests.filter(r => r.status === 'pending');
-  const history = requests.filter(r => r.status !== 'pending');
+  const filteredRequests = requests.filter(r => 
+    r.transactionId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.userEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.userId?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const pending = filteredRequests.filter(r => r.status === 'pending');
+  const history = filteredRequests.filter(r => r.status !== 'pending');
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-black text-gray-900 uppercase tracking-tighter mb-2">Deposit Requests</h1>
-        <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.2em]">Manage and approve user deposits</p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-gray-900 uppercase tracking-tighter mb-2">Deposit Requests</h1>
+          <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.2em]">Manage and approve user deposits</p>
+        </div>
+        <div className="relative w-full md:w-80">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <input 
+            type="text" 
+            placeholder="Search TrxID, Email, or UID"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-white border border-gray-100 rounded-2xl py-3 pl-12 pr-4 font-bold text-sm outline-none focus:border-indigo-500 shadow-sm transition-all"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

@@ -67,6 +67,9 @@ export default function AdminSettings() {
     markupPercentage: 10
   });
 
+  // Track if current tab has been edited to prevent onSnapshot override
+  const [isEdited, setIsEdited] = useState(false);
+
   useEffect(() => {
     const unsubProviders = onSnapshot(collection(db, 'providers'), (snap) => {
       setProviders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Provider)));
@@ -74,26 +77,37 @@ export default function AdminSettings() {
       console.error("AdminSettings: Error loading providers", err);
     });
 
-    // Load site settings once on mount to populate the form without interfering with edits
+    // Initial load for settings
     const loadSettings = async () => {
       try {
-        const siteDoc = await getDoc(doc(db, 'settings', 'site'));
-        if (siteDoc.exists()) {
-          const data = siteDoc.data();
+        const [siteSnap, pagesSnap] = await Promise.all([
+          getDoc(doc(db, 'settings', 'site')),
+          getDoc(doc(db, 'settings', 'pages'))
+        ]);
+
+        if (siteSnap.exists()) {
+          const data = siteSnap.data();
           setSiteSettings(prev => ({
             ...prev,
             ...data,
-            paymentNumbers: { ...prev.paymentNumbers, ...(data.paymentNumbers || {}) },
-            supportLinks: { ...prev.supportLinks, ...(data.supportLinks || {}) }
+            paymentNumbers: { 
+              bkash: data.paymentNumbers?.bkash ?? '',
+              nagad: data.paymentNumbers?.nagad ?? '',
+              rocket: data.paymentNumbers?.rocket ?? '',
+              bank: data.paymentNumbers?.bank ?? '',
+            },
+            supportLinks: { 
+              whatsapp: data.supportLinks?.whatsapp ?? '',
+              telegram: data.supportLinks?.telegram ?? ''
+            }
           }));
         }
 
-        const pagesDoc = await getDoc(doc(db, 'settings', 'pages'));
-        if (pagesDoc.exists()) {
-          setPageContent(pagesDoc.data() as PageContent);
+        if (pagesSnap.exists()) {
+          setPageContent(prev => ({ ...prev, ...pagesSnap.data() }));
         }
       } catch (err) {
-        console.error("AdminSettings: Error loading settings initial", err);
+        console.error("AdminSettings: Initial load error", err);
       } finally {
         setLoading(false);
       }
@@ -101,10 +115,32 @@ export default function AdminSettings() {
 
     loadSettings();
 
+    // Still use snapshot for remote changes, but ONLY if user hasn't edited anything
+    const unsubSite = onSnapshot(doc(db, 'settings', 'site'), (snap) => {
+      if (snap.exists() && !isEdited && !savingSettings) {
+        const data = snap.data();
+        setSiteSettings(prev => ({
+          ...prev,
+          ...data,
+          paymentNumbers: { 
+            bkash: data.paymentNumbers?.bkash ?? prev.paymentNumbers.bkash,
+            nagad: data.paymentNumbers?.nagad ?? prev.paymentNumbers.nagad,
+            rocket: data.paymentNumbers?.rocket ?? prev.paymentNumbers.rocket,
+            bank: data.paymentNumbers?.bank ?? prev.paymentNumbers.bank,
+          },
+          supportLinks: { 
+            whatsapp: data.supportLinks?.whatsapp ?? prev.supportLinks.whatsapp,
+            telegram: data.supportLinks?.telegram ?? prev.supportLinks.telegram
+          }
+        }));
+      }
+    });
+
     return () => {
       unsubProviders();
+      unsubSite();
     };
-  }, []);
+  }, [isEdited, savingSettings]);
 
   const handleUpdateSiteSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,6 +157,7 @@ export default function AdminSettings() {
         tabTitle: siteSettings.tabTitle
       };
       await setDoc(settingsRef, brandingData, { merge: true });
+      setIsEdited(false);
       alert('Branding settings updated successfully!');
     } catch (err: any) {
       console.error("AdminSettings Branding Update Error:", err);
@@ -146,6 +183,7 @@ export default function AdminSettings() {
         }
       };
       await setDoc(settingsRef, paymentData, { merge: true });
+      setIsEdited(false);
       alert('Payment information updated successfully!');
     } catch (err: any) {
       console.error("AdminSettings Payment Update Error:", err);
@@ -169,6 +207,7 @@ export default function AdminSettings() {
         }
       };
       await setDoc(settingsRef, supportData, { merge: true });
+      setIsEdited(false);
       alert('Support information updated successfully!');
     } catch (err: any) {
       console.error("AdminSettings Support Update Error:", err);
@@ -186,6 +225,7 @@ export default function AdminSettings() {
       console.log("AdminSettings: Updating page content...", pageContent);
       const pagesRef = doc(db, 'settings', 'pages');
       await setDoc(pagesRef, pageContent, { merge: true });
+      setIsEdited(false);
       alert('Page content updated successfully!');
     } catch (err: any) {
       console.error("AdminSettings Page Content Update Error:", err);
@@ -376,6 +416,7 @@ export default function AdminSettings() {
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Website Name</label>
                   <input type="text" value={siteSettings.siteName} onChange={e => {
                     const val = e.target.value;
+                    setIsEdited(true);
                     setSiteSettings(prev => ({...prev, siteName: val}));
                   }} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
                 </div>
@@ -383,6 +424,7 @@ export default function AdminSettings() {
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Tab Title</label>
                   <input type="text" value={siteSettings.tabTitle} onChange={e => {
                     const val = e.target.value;
+                    setIsEdited(true);
                     setSiteSettings(prev => ({...prev, tabTitle: val}));
                   }} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
                 </div>
@@ -390,6 +432,7 @@ export default function AdminSettings() {
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Favicon URL</label>
                   <input type="text" value={siteSettings.faviconUrl} onChange={e => {
                     const val = e.target.value;
+                    setIsEdited(true);
                     setSiteSettings(prev => ({...prev, faviconUrl: val}));
                   }} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
                 </div>
@@ -400,6 +443,7 @@ export default function AdminSettings() {
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Banner Title</label>
                   <input type="text" value={siteSettings.bannerTitle} onChange={e => {
                     const val = e.target.value;
+                    setIsEdited(true);
                     setSiteSettings(prev => ({...prev, bannerTitle: val}));
                   }} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
                 </div>
@@ -407,6 +451,7 @@ export default function AdminSettings() {
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Banner Text</label>
                   <input type="text" value={siteSettings.bannerText} onChange={e => {
                     const val = e.target.value;
+                    setIsEdited(true);
                     setSiteSettings(prev => ({...prev, bannerText: val}));
                   }} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
                 </div>
@@ -414,6 +459,7 @@ export default function AdminSettings() {
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Banner Image URL</label>
                   <input type="text" value={siteSettings.bannerImage} onChange={e => {
                     const val = e.target.value;
+                    setIsEdited(true);
                     setSiteSettings(prev => ({...prev, bannerImage: val}));
                   }} className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all mt-1" />
                 </div>
@@ -462,21 +508,33 @@ export default function AdminSettings() {
               <div className="space-y-4">
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Dashboard News</label>
-                  <textarea value={pageContent.dashboardNews} onChange={e => setPageContent({...pageContent, dashboardNews: e.target.value})} className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold h-32 mt-1" />
+                  <textarea value={pageContent.dashboardNews} onChange={e => {
+                    setIsEdited(true);
+                    setPageContent({...pageContent, dashboardNews: e.target.value});
+                  }} className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold h-32 mt-1" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">New Order Instructions</label>
-                  <textarea value={pageContent.newOrderInstructions} onChange={e => setPageContent({...pageContent, newOrderInstructions: e.target.value})} className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold h-32 mt-1" />
+                  <textarea value={pageContent.newOrderInstructions} onChange={e => {
+                    setIsEdited(true); 
+                    setPageContent({...pageContent, newOrderInstructions: e.target.value});
+                  }} className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold h-32 mt-1" />
                 </div>
               </div>
               <div className="space-y-4">
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">New Order Title</label>
-                  <input type="text" value={pageContent.newOrderTitle} onChange={e => setPageContent({...pageContent, newOrderTitle: e.target.value})} className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
+                  <input type="text" value={pageContent.newOrderTitle} onChange={e => {
+                    setIsEdited(true);
+                    setPageContent({...pageContent, newOrderTitle: e.target.value});
+                  }} className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Services Description</label>
-                  <input type="text" value={pageContent.servicesDescription} onChange={e => setPageContent({...pageContent, servicesDescription: e.target.value})} className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
+                  <input type="text" value={pageContent.servicesDescription} onChange={e => {
+                    setIsEdited(true);
+                    setPageContent({...pageContent, servicesDescription: e.target.value});
+                  }} className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
               </div>
             </div>
@@ -495,6 +553,7 @@ export default function AdminSettings() {
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">bKash Numbers</label>
                   <input type="text" value={siteSettings.paymentNumbers?.bkash || ''} onChange={e => {
                     const val = e.target.value;
+                    setIsEdited(true);
                     setSiteSettings(prev => ({...prev, paymentNumbers: {...prev.paymentNumbers, bkash: val}}));
                   }} placeholder="017..., 018..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
@@ -502,6 +561,7 @@ export default function AdminSettings() {
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Nagad Numbers</label>
                   <input type="text" value={siteSettings.paymentNumbers?.nagad || ''} onChange={e => {
                     const val = e.target.value;
+                    setIsEdited(true);
                     setSiteSettings(prev => ({...prev, paymentNumbers: {...prev.paymentNumbers, nagad: val}}));
                   }} placeholder="019..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
@@ -511,6 +571,7 @@ export default function AdminSettings() {
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Rocket Numbers</label>
                   <input type="text" value={siteSettings.paymentNumbers?.rocket || ''} onChange={e => {
                     const val = e.target.value;
+                    setIsEdited(true);
                     setSiteSettings(prev => ({...prev, paymentNumbers: {...prev.paymentNumbers, rocket: val}}));
                   }} placeholder="018..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
@@ -518,6 +579,7 @@ export default function AdminSettings() {
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Bank Transfer Details</label>
                   <textarea value={siteSettings.paymentNumbers?.bank || ''} onChange={e => {
                     const val = e.target.value;
+                    setIsEdited(true);
                     setSiteSettings(prev => ({...prev, paymentNumbers: {...prev.paymentNumbers, bank: val}}));
                   }} placeholder="Bank Name / Account No" className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold h-24 mt-1" />
                 </div>
@@ -536,11 +598,17 @@ export default function AdminSettings() {
                 <h3 className="font-black uppercase text-xs text-gray-400 tracking-widest mb-4">Contact Links</h3>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">WhatsApp Number/Link</label>
-                  <input type="text" value={siteSettings.supportLinks?.whatsapp || ''} onChange={e => setSiteSettings({...siteSettings, supportLinks: {...siteSettings.supportLinks, whatsapp: e.target.value}})} placeholder="e.g. 8801700000000" className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
+                  <input type="text" value={siteSettings.supportLinks?.whatsapp || ''} onChange={e => {
+                    setIsEdited(true);
+                    setSiteSettings({...siteSettings, supportLinks: {...siteSettings.supportLinks, whatsapp: e.target.value}});
+                  }} placeholder="e.g. 8801700000000" className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Telegram Username/Link</label>
-                  <input type="text" value={siteSettings.supportLinks?.telegram || ''} onChange={e => setSiteSettings({...siteSettings, supportLinks: {...siteSettings.supportLinks, telegram: e.target.value}})} placeholder="e.g. natokboost_support" className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
+                  <input type="text" value={siteSettings.supportLinks?.telegram || ''} onChange={e => {
+                    setIsEdited(true);
+                    setSiteSettings({...siteSettings, supportLinks: {...siteSettings.supportLinks, telegram: e.target.value}});
+                  }} placeholder="e.g. natokboost_support" className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
               </div>
             </div>

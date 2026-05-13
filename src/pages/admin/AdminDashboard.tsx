@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { motion } from 'motion/react';
-import { Users, ShoppingCart, Wallet, MessageSquare, ArrowUpRight, TrendingUp, RefreshCw, Server } from 'lucide-react';
+import { Users, ShoppingCart, Wallet, MessageSquare, ArrowUpRight, TrendingUp, RefreshCw, Server, Zap } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -19,6 +19,39 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [apiBalances, setApiBalances] = useState<{name: string, balance: string, currency: string}[]>([]);
   const [fetchingBalances, setFetchingBalances] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const analyzeFailedOrders = async () => {
+    setAnalyzing(true);
+    try {
+      const q = query(collection(db, 'orders'), where('status', 'in', ['error', 'canceled']), limit(20));
+      const snap = await getDocs(q);
+      const failedOrders = snap.docs.map(doc => ({
+        id: doc.id,
+        service: doc.data().serviceName,
+        note: doc.data().adminNote || doc.data().apiResponse?.error || 'Unknown'
+      }));
+
+      if (failedOrders.length === 0) {
+        setAiAnalysis("বর্তমানে কোনো ফেইল হওয়া অর্ডার নেই এনালাইসিস করার জন্য।");
+        return;
+      }
+
+      const res = await fetch('/api/ai/analyze-orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orders: failedOrders })
+      });
+      const data = await res.json();
+      setAiAnalysis(data.analysis);
+    } catch (err) {
+      console.error(err);
+      setAiAnalysis("AI এনালাইসিস সম্ভব হয়নি। দয়া করে পরে চেষ্টা করুন।");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   const fetchApiBalances = async () => {
     setFetchingBalances(true);
@@ -218,6 +251,41 @@ export default function AdminDashboard() {
             )}
             {fetchingBalances && apiBalances.length === 0 && (
               <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight">AI Order Analysis</h3>
+            <button 
+              onClick={analyzeFailedOrders}
+              disabled={analyzing}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
+            >
+              {analyzing ? <RefreshCw size={14} className="animate-spin" /> : <TrendingUp size={14} />}
+              <span>Generate Report</span>
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            {aiAnalysis ? (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 italic text-sm text-indigo-900 leading-relaxed"
+              >
+                 <div className="flex items-center gap-2 mb-2 text-indigo-600 font-black uppercase text-[10px] tracking-widest">
+                    <Zap size={14} />
+                    Gemini Manager Insights
+                 </div>
+                 {aiAnalysis}
+              </motion.div>
+            ) : (
+              <div className="text-center py-12 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                <MessageSquare size={32} className="mx-auto text-gray-300 mb-2" />
+                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Click to analyze failed orders</p>
+              </div>
             )}
           </div>
         </div>

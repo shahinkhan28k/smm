@@ -6,11 +6,50 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// Initialize Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+
+  // ... (previous health check and proxy routes)
+
+  // API Route: AI Order Analysis
+  app.post("/api/ai/analyze-orders", async (req, res) => {
+    try {
+      const { orders } = req.body;
+      
+      if (!orders || !Array.isArray(orders)) {
+        return res.status(400).json({ error: "Orders array is required" });
+      }
+
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: "Gemini API key not configured" });
+      }
+
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      
+      const prompt = `
+        You are a professional SMM Panel Order Manager for "Natok Boost". 
+        Analyze the following failed or errored orders and provide a concise report in Bengali.
+        Explain common reasons for failure and suggest fixes.
+        Orders: ${JSON.stringify(orders.slice(0, 20))}
+      `;
+
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      
+      res.json({ analysis: text });
+    } catch (error: any) {
+      console.error("[AI] Error:", error.message);
+      res.status(500).json({ error: "Failed to generate AI analysis" });
+    }
+  });
 
   // API Route: Health Check
   app.get("/api/health", (req, res) => {

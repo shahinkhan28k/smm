@@ -149,13 +149,18 @@ export default function AdminOrders() {
     return matchesSearch && matchesStatus;
   });
 
+  const [viewingOrder, setViewingOrder] = useState<any>(null);
+
   const getStatusStyle = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'completed': return 'bg-green-100 text-green-700';
-      case 'processing': return 'bg-blue-100 text-blue-700';
-      case 'pending': return 'bg-gray-100 text-gray-700';
-      case 'canceled': return 'bg-red-100 text-red-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'completed': return 'bg-green-50 text-green-700 border-green-100';
+      case 'processing': return 'bg-blue-50 text-blue-700 border-blue-100';
+      case 'in_progress': return 'bg-indigo-50 text-indigo-700 border-indigo-100';
+      case 'pending': return 'bg-orange-50 text-orange-700 border-orange-100';
+      case 'pending_provider': return 'bg-purple-50 text-purple-700 border-purple-100';
+      case 'canceled': return 'bg-red-50 text-red-700 border-red-100';
+      case 'error': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-50 text-gray-700 border-gray-100';
     }
   };
 
@@ -248,9 +253,12 @@ export default function AdminOrders() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase inline-flex items-center gap-1 ${getStatusStyle(order.status)}`}>
+                      <div className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase inline-flex items-center gap-1 border ${getStatusStyle(order.status)}`}>
                         {order.status}
-                      </span>
+                      </div>
+                      {order.apiStatusResponse?.status && (
+                        <p className="text-[9px] text-gray-400 mt-1 italic">API: {order.apiStatusResponse.status}</p>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -265,27 +273,38 @@ export default function AdminOrders() {
                           <option value="canceled">Canceled</option>
                           <option value="error">Error</option>
                         </select>
-                        {(order as any).providerOrderId ? (
-                          <button 
-                            onClick={() => syncOrderStatus(order)}
-                            disabled={processingSync === order.id}
-                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                            title="Sync Status from API"
-                          >
-                            <RefreshCw size={14} className={processingSync === order.id ? 'animate-spin' : ''} />
-                          </button>
-                        ) : (
-                          (order as any).providerId && (
+                        
+                        <div className="flex items-center border-l border-gray-100 ml-2 pl-2 gap-1">
+                          {(order as any).providerOrderId ? (
                             <button 
-                              onClick={() => pushToProvider(order)}
+                              onClick={() => syncOrderStatus(order)}
                               disabled={processingSync === order.id}
-                              className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
-                              title="Push manually to Provider"
+                              className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                              title="Sync Status"
                             >
-                              <ArrowUpRight size={14} className={processingSync === order.id ? 'animate-spin' : ''} />
+                              <RefreshCw size={14} className={processingSync === order.id ? 'animate-spin' : ''} />
                             </button>
-                          )
-                        )}
+                          ) : (
+                            (order as any).providerId && (
+                              <button 
+                                onClick={() => pushToProvider(order)}
+                                disabled={processingSync === order.id}
+                                className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
+                                title="Push to API"
+                              >
+                                <ArrowUpRight size={14} className={processingSync === order.id ? 'animate-spin' : ''} />
+                              </button>
+                            )
+                          )}
+                          
+                          <button 
+                            onClick={() => setViewingOrder(order)}
+                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg"
+                            title="View API Details"
+                          >
+                            <Eye size={14} />
+                          </button>
+                        </div>
                       </div>
                     </td>
                   </motion.tr>
@@ -303,6 +322,71 @@ export default function AdminOrders() {
           </div>
         )}
       </div>
+
+      {/* API Response Modal */}
+      <AnimatePresence>
+        {viewingOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setViewingOrder(null)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-2xl bg-white rounded-[32px] shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-black text-gray-900 uppercase">Order Details & API Response</h3>
+                  <p className="text-xs text-gray-500 font-bold">#{viewingOrder.id}</p>
+                </div>
+                <button onClick={() => setViewingOrder(null)} className="p-2 hover:bg-gray-100 rounded-xl">
+                  <XCircle size={24} className="text-gray-400" />
+                </button>
+              </div>
+              <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+                <div className="grid grid-cols-2 gap-6">
+                   <div className="bg-gray-50 p-4 rounded-2xl">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Provider ID</p>
+                      <p className="text-sm font-mono font-bold text-gray-900">{(viewingOrder as any).providerOrderId || 'N/A'}</p>
+                   </div>
+                   <div className="bg-gray-50 p-4 rounded-2xl">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Service ID</p>
+                      <p className="text-sm font-mono font-bold text-gray-900">{viewingOrder.serviceId}</p>
+                   </div>
+                </div>
+
+                <div className="space-y-2">
+                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Latest API Response</p>
+                   <pre className="bg-gray-900 text-green-400 p-6 rounded-2xl text-xs font-mono overflow-x-auto">
+                      {JSON.stringify((viewingOrder as any).apiResponse || (viewingOrder as any).apiStatusResponse || { status: 'No API interaction yet' }, null, 2)}
+                   </pre>
+                </div>
+
+                {viewingOrder.adminNote && (
+                  <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl">
+                    <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-1">Admin Note / Error</p>
+                    <p className="text-xs font-bold text-orange-900">{viewingOrder.adminNote}</p>
+                  </div>
+                )}
+              </div>
+              <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end">
+                 <button 
+                  onClick={() => setViewingOrder(null)}
+                  className="px-8 py-3 bg-gray-900 text-white rounded-xl font-black uppercase text-xs tracking-widest"
+                 >
+                   Close Details
+                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

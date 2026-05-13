@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Wallet, Smartphone, CreditCard, ChevronRight, CheckCircle2, Clock, Info, History, AlertCircle, X, Copy, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
+import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -79,6 +79,18 @@ export default function AddFunds() {
 
     setSubmitting(true);
     try {
+      // Check for duplicate Transaction ID
+      const qCheck = query(
+        collection(db, 'transactions'),
+        where('transactionId', '==', transactionId.trim().toUpperCase())
+      );
+      const checkSnap = await getDocs(qCheck);
+      if (!checkSnap.empty) {
+        alert('This Transaction ID has already been submitted or used.');
+        setSubmitting(false);
+        return;
+      }
+
       console.log("AddFunds: Submitting transaction request...");
       const transData = {
         userId: userData.uid,
