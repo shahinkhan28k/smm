@@ -80,10 +80,15 @@ export default function AdminServices() {
       if (cats.length > 0 && !newService.categoryId) {
         setNewService(prev => ({ ...prev, categoryId: cats[0].id }));
       }
+    }, (err) => {
+      console.error("AdminServices: Error loading categories", err);
     });
 
     const unsubServs = onSnapshot(collection(db, 'services'), (snap) => {
       setServices(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service)));
+      setLoading(false);
+    }, (err) => {
+      console.error("AdminServices: Error loading services", err);
       setLoading(false);
     });
 
@@ -94,6 +99,8 @@ export default function AdminServices() {
         setSelectedProvider(provs[0].id);
         setNewService(prev => ({ ...prev, providerId: provs[0].id }));
       }
+    }, (err) => {
+      console.error("AdminServices: Error loading providers", err);
     });
 
     return () => {

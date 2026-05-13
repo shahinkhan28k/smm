@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy, setDoc, getDoc, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy, setDoc, getDoc, writeBatch, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { Settings, Plus, Trash2, Globe, Key, RefreshCw, Layers, CheckCircle2, AlertCircle, Palette, Image as ImageIcon, Type, Link as LinkIcon, Newspaper, Wallet, MessageSquare } from 'lucide-react';
@@ -68,17 +68,15 @@ export default function AdminSettings() {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const unsubProviders = onSnapshot(collection(db, 'providers'), (snap) => {
+      setProviders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Provider)));
+    }, (err) => {
+      console.error("AdminSettings: Error loading providers", err);
+    });
 
-  const fetchData = async () => {
-    try {
-      const providerSnap = await getDocs(collection(db, 'providers'));
-      setProviders(providerSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Provider)));
-
-      const settingsSnap = await getDoc(doc(db, 'settings', 'site'));
-      if (settingsSnap.exists()) {
-        const data = settingsSnap.data();
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'site'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
         setSiteSettings(prev => ({
           ...prev,
           ...data,
@@ -86,27 +84,77 @@ export default function AdminSettings() {
           supportLinks: data.supportLinks || prev.supportLinks
         }));
       }
+    }, (err) => {
+      console.warn("AdminSettings: Error loading site settings", err);
+    });
 
-      const pagesSnap = await getDoc(doc(db, 'settings', 'pages'));
-      if (pagesSnap.exists()) {
-        setPageContent(pagesSnap.data() as PageContent);
+    const unsubPages = onSnapshot(doc(db, 'settings', 'pages'), (snap) => {
+      if (snap.exists()) {
+        setPageContent(snap.data() as PageContent);
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
       setLoading(false);
-    }
-  };
+    }, (err) => {
+      console.error("AdminSettings: Error loading page content", err);
+      setLoading(false);
+    });
+
+    return () => {
+      unsubProviders();
+      unsubSettings();
+      unsubPages();
+    };
+  }, []);
 
   const handleUpdateSiteSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingSettings(true);
     try {
-      await setDoc(doc(db, 'settings', 'site'), siteSettings);
-      alert('Settings updated successfully!');
-    } catch (err) {
-      console.error(err);
+      console.log("AdminSettings: Updating site settings...", siteSettings);
+      const settingsRef = doc(db, 'settings', 'site');
+      await setDoc(settingsRef, siteSettings, { merge: true });
+      alert('Branding settings updated successfully!');
+    } catch (err: any) {
+      console.error("AdminSettings Branding Update Error:", err);
       handleFirestoreError(err, OperationType.WRITE, 'settings/site');
+      alert('Failed to update branding: ' + err.message);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleUpdatePaymentInfo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    try {
+      console.log("AdminSettings: Updating payment numbers...", siteSettings.paymentNumbers);
+      const settingsRef = doc(db, 'settings', 'site');
+      await updateDoc(settingsRef, {
+        paymentNumbers: siteSettings.paymentNumbers
+      });
+      alert('Payment information updated successfully!');
+    } catch (err: any) {
+      console.error("AdminSettings Payment Update Error:", err);
+      handleFirestoreError(err, OperationType.WRITE, 'settings/site');
+      alert('Failed to update payments: ' + err.message);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleUpdateSupportInfo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    try {
+      console.log("AdminSettings: Updating support links...", siteSettings.supportLinks);
+      const settingsRef = doc(db, 'settings', 'site');
+      await updateDoc(settingsRef, {
+        supportLinks: siteSettings.supportLinks
+      });
+      alert('Support information updated successfully!');
+    } catch (err: any) {
+      console.error("AdminSettings Support Update Error:", err);
+      handleFirestoreError(err, OperationType.WRITE, 'settings/site');
+      alert('Failed to update support info: ' + err.message);
     } finally {
       setSavingSettings(false);
     }
@@ -116,11 +164,14 @@ export default function AdminSettings() {
     e.preventDefault();
     setSavingSettings(true);
     try {
-      await setDoc(doc(db, 'settings', 'pages'), pageContent);
+      console.log("AdminSettings: Updating page content...", pageContent);
+      const pagesRef = doc(db, 'settings', 'pages');
+      await setDoc(pagesRef, pageContent, { merge: true });
       alert('Page content updated successfully!');
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("AdminSettings Page Content Update Error:", err);
       handleFirestoreError(err, OperationType.WRITE, 'settings/pages');
+      alert('Failed to update page content: ' + err.message);
     } finally {
       setSavingSettings(false);
     }
@@ -133,7 +184,6 @@ export default function AdminSettings() {
       alert('Provider added successfully!');
       setNewProvider({ name: '', apiUrl: '', apiKey: '', status: 'active', markupPercentage: 10 });
       setShowAddModal(false);
-      fetchData();
     } catch (err: any) {
       console.error(err);
       alert('Failed to add provider: ' + (err.message || String(err)));
@@ -144,7 +194,6 @@ export default function AdminSettings() {
     if (!confirm('Are you sure you want to delete this provider?')) return;
     try {
       await deleteDoc(doc(db, 'providers', id));
-      fetchData();
     } catch (err) {
       console.error(err);
     }
@@ -218,8 +267,7 @@ export default function AdminSettings() {
 
       await batch.commit();
       alert(`Successfully synced ${totalImported} services from ${provider.name}.\nMarkup (+${provider.markupPercentage}%) applied successfully.`);
-      fetchData();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Sync Error:', err);
       alert('Sync failed. Error: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -386,27 +434,27 @@ export default function AdminSettings() {
         )}
 
         {activeTab === 'payments' && (
-          <form onSubmit={handleUpdateSiteSettings} className="p-8 space-y-6">
+          <form onSubmit={handleUpdatePaymentInfo} className="p-8 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
                 <h3 className="font-black uppercase text-xs text-gray-400 tracking-widest mb-4">Payment Numbers (Comma separated)</h3>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">bKash Numbers</label>
-                  <input type="text" value={siteSettings.paymentNumbers?.bkash} onChange={e => setSiteSettings({...siteSettings, paymentNumbers: {...siteSettings.paymentNumbers, bkash: e.target.value}})} placeholder="017..., 018..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
+                  <input type="text" value={siteSettings.paymentNumbers?.bkash || ''} onChange={e => setSiteSettings({...siteSettings, paymentNumbers: {...siteSettings.paymentNumbers, bkash: e.target.value}})} placeholder="017..., 018..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Nagad Numbers</label>
-                  <input type="text" value={siteSettings.paymentNumbers?.nagad} onChange={e => setSiteSettings({...siteSettings, paymentNumbers: {...siteSettings.paymentNumbers, nagad: e.target.value}})} className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
+                  <input type="text" value={siteSettings.paymentNumbers?.nagad || ''} onChange={e => setSiteSettings({...siteSettings, paymentNumbers: {...siteSettings.paymentNumbers, nagad: e.target.value}})} placeholder="019..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
               </div>
               <div className="space-y-4 pt-8">
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Rocket Numbers</label>
-                  <input type="text" value={siteSettings.paymentNumbers?.rocket} onChange={e => setSiteSettings({...siteSettings, paymentNumbers: {...siteSettings.paymentNumbers, rocket: e.target.value}})} className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
+                  <input type="text" value={siteSettings.paymentNumbers?.rocket || ''} onChange={e => setSiteSettings({...siteSettings, paymentNumbers: {...siteSettings.paymentNumbers, rocket: e.target.value}})} placeholder="018..." className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Bank Transfer Details</label>
-                  <textarea value={siteSettings.paymentNumbers?.bank} onChange={e => setSiteSettings({...siteSettings, paymentNumbers: {...siteSettings.paymentNumbers, bank: e.target.value}})} className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold h-24 mt-1" />
+                  <textarea value={siteSettings.paymentNumbers?.bank || ''} onChange={e => setSiteSettings({...siteSettings, paymentNumbers: {...siteSettings.paymentNumbers, bank: e.target.value}})} placeholder="Bank Name / Account No" className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold h-24 mt-1" />
                 </div>
               </div>
             </div>
@@ -417,17 +465,17 @@ export default function AdminSettings() {
         )}
 
         {activeTab === 'support' && (
-          <form onSubmit={handleUpdateSiteSettings} className="p-8 space-y-6">
+          <form onSubmit={handleUpdateSupportInfo} className="p-8 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
                 <h3 className="font-black uppercase text-xs text-gray-400 tracking-widest mb-4">Contact Links</h3>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">WhatsApp Number/Link</label>
-                  <input type="text" value={siteSettings.supportLinks?.whatsapp} onChange={e => setSiteSettings({...siteSettings, supportLinks: {...siteSettings.supportLinks, whatsapp: e.target.value}})} placeholder="e.g. 8801700000000" className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
+                  <input type="text" value={siteSettings.supportLinks?.whatsapp || ''} onChange={e => setSiteSettings({...siteSettings, supportLinks: {...siteSettings.supportLinks, whatsapp: e.target.value}})} placeholder="e.g. 8801700000000" className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Telegram Username/Link</label>
-                  <input type="text" value={siteSettings.supportLinks?.telegram} onChange={e => setSiteSettings({...siteSettings, supportLinks: {...siteSettings.supportLinks, telegram: e.target.value}})} placeholder="e.g. natokboost_support" className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
+                  <input type="text" value={siteSettings.supportLinks?.telegram || ''} onChange={e => setSiteSettings({...siteSettings, supportLinks: {...siteSettings.supportLinks, telegram: e.target.value}})} placeholder="e.g. natokboost_support" className="w-full bg-gray-50 rounded-2xl px-5 py-4 font-bold mt-1" />
                 </div>
               </div>
             </div>
@@ -479,14 +527,13 @@ export default function AdminSettings() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">API Key</label>
-                  <input 
+                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">API Key (String or JSON)</label>
+                  <textarea 
                     required
-                    type="text" 
-                    placeholder="Enter your API Key"
+                    placeholder='Enter your API Key. If your provider requires JSON, paste the full JSON object here.'
                     value={newProvider.apiKey}
                     onChange={e => setNewProvider({...newProvider, apiKey: e.target.value})}
-                    className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all"
+                    className="w-full bg-gray-50 border border-transparent focus:border-indigo-500 rounded-2xl px-5 py-4 font-bold outline-none transition-all h-24 font-mono text-sm"
                   />
                 </div>
                 <div>

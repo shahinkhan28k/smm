@@ -28,10 +28,15 @@ export default function Home() {
   useEffect(() => {
     const unsubSite = onSnapshot(doc(db, 'settings', 'site'), (snap) => {
       if (snap.exists()) setSettings(snap.data() as SiteSettings);
+    }, (err) => {
+      console.warn("Home: Error loading site settings", err);
     });
 
     const unsubPages = onSnapshot(doc(db, 'settings', 'pages'), (snap) => {
       if (snap.exists()) setPageSettings(snap.data());
+      setLoading(false);
+    }, (err) => {
+      console.warn("Home: Error loading page settings", err);
       setLoading(false);
     });
 
@@ -45,6 +50,8 @@ export default function Home() {
       );
       unsubOrders = onSnapshot(q, (snap) => {
         setRecentOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }, (err) => {
+        console.warn("Home: Error loading recent orders", err);
       });
     }
 

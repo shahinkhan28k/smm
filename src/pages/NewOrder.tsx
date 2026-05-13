@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, orderBy, addDoc, serverTimestamp, getDoc, doc, runTransaction } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy, addDoc, serverTimestamp, getDoc, doc, runTransaction } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
@@ -50,50 +50,35 @@ export default function NewOrder() {
   const [pageSettings, setPageSettings] = useState<PageSettings | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const settingsPath = 'settings/pages';
-        const settingsSnap = await getDoc(doc(db, 'settings', 'pages')).catch(e => {
-            console.warn("Page settings fetch failed:", e);
-            return null;
-        });
-        if (settingsSnap && settingsSnap.exists()) {
-            setPageSettings(settingsSnap.data());
-        }
+    const unsubPages = onSnapshot(doc(db, 'settings', 'pages'), (snap) => {
+      if (snap.exists()) setPageSettings(snap.data());
+    }, (err) => {
+      console.warn("NewOrder: Error loading pages", err);
+    });
 
-        const categoryPath = 'categories';
-        const catSnap = await getDocs(query(collection(db, categoryPath), orderBy('name'))).catch(async e => {
-          console.warn("Categories fetch with order failed, trying without:", e);
-          try {
-            return await getDocs(collection(db, categoryPath));
-          } catch (err2) {
-            handleFirestoreError(err2, OperationType.GET, categoryPath);
-            throw err2;
-          }
-        });
-        const cats = catSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
-        setCategories(cats);
-
-        const servicePath = 'services';
-        try {
-          const servSnap = await getDocs(collection(db, servicePath));
-          const servs = servSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service));
-          setServices(servs);
-        } catch (e) {
-          handleFirestoreError(e, OperationType.GET, servicePath);
-        }
-
-        if (cats.length > 0) {
-          setSelectedCategory(cats[0].id);
-        }
-      } catch (err) {
-        console.error("NewOrder fetchData error:", err);
-      } finally {
-        setLoading(false);
+    const unsubCats = onSnapshot(query(collection(db, 'categories'), orderBy('name')), (snap) => {
+      const cats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
+      setCategories(cats);
+      if (cats.length > 0 && !selectedCategory) {
+        setSelectedCategory(cats[0].id);
       }
+    }, (err) => {
+      console.warn("NewOrder: Error loading categories", err);
+    });
+
+    const unsubServs = onSnapshot(collection(db, 'services'), (snap) => {
+      setServices(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service)));
+      setLoading(false);
+    }, (err) => {
+      console.error("NewOrder: Error loading services", err);
+      setLoading(false);
+    });
+
+    return () => {
+      unsubPages();
+      unsubCats();
+      unsubServs();
     };
-    fetchData();
   }, []);
 
   useEffect(() => {

@@ -30,6 +30,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           document.getElementsByTagName('head')[0].appendChild(link);
         }
       }
+    }, (err) => {
+      console.warn("Layout: Error loading site settings", err);
     });
     
     let unsubDeposits = () => {};
@@ -37,6 +39,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       const q = query(collection(db, 'transactions'), where('type', '==', 'deposit'), where('status', '==', 'pending'));
       unsubDeposits = onSnapshot(q, (snapshot) => {
         setPendingDepositsCount(snapshot.size);
+      }, (err) => {
+        console.warn("Layout: Error loading pending deposits", err);
       });
     }
 
@@ -72,7 +76,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { to: '/admin/orders', icon: ListOrdered, label: 'Manage Orders' },
     { to: '/admin/services', icon: ListOrdered, label: 'Catalog' },
     { to: '/admin/users', icon: UserIcon, label: 'User List' },
-    { to: '/admin/deposits', icon: CreditCard, label: 'Deposit Requests' },
+    { to: '/admin/deposits', icon: CreditCard, label: 'Add Funds Mgmt' },
     { to: '/admin/messages', icon: MessageSquare, label: 'Live Support' },
     { to: '/admin/staff', icon: Shield, label: 'Staff & Roles' },
     { to: '/admin/settings', icon: Settings, label: 'Site Settings' },
@@ -81,6 +85,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(true);
 
   const isHardcodedAdmin = user?.email?.toLowerCase() === 'shahinkhan28w@gmail.com' || 
+                           user?.email?.toLowerCase() === 'shahinkhan28a@gmail.com' ||
                            user?.uid === 'wh4zeA8S61Rf4fQ8Im3vo7sW6d03';
   const isAdmin = userData?.role === 'admin' || isHardcodedAdmin;
 
@@ -240,8 +245,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {/* Desktop Sidebar (Optional, for now just links in top nav or layout) */}
-      
       <BottomNav />
     </div>
   );

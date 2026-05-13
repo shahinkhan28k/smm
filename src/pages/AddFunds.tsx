@@ -21,9 +21,13 @@ export default function AddFunds() {
   useEffect(() => {
     const unsubPages = onSnapshot(doc(db, 'settings', 'pages'), (doc) => {
         if (doc.exists()) setPageSettings(doc.data());
+    }, (err) => {
+        console.warn("AddFunds: Error loading pages", err);
     });
     const unsubSite = onSnapshot(doc(db, 'settings', 'site'), (doc) => {
         if (doc.exists()) setSiteSettings(doc.data());
+    }, (err) => {
+        console.warn("AddFunds: Error loading site settings", err);
     });
     
     let unsubTransactions = () => {};
@@ -36,6 +40,8 @@ export default function AddFunds() {
       );
       unsubTransactions = onSnapshot(q, (snapshot) => {
         setTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }, (err) => {
+        console.error("AddFunds: Error loading transactions", err);
       });
     }
 

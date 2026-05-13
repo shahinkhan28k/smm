@@ -24,6 +24,9 @@ export default function AdminDashboard() {
       const totalUserBalance = usersData.reduce((acc, data) => acc + (data.balance || 0), 0);
       setStats(prev => ({ ...prev, totalUsers: snap.size, totalUserBalance }));
       setLoading(false);
+    }, (err) => {
+      console.error("AdminDashboard: Error loading users", err);
+      setLoading(false);
     });
 
     const unsubOrders = onSnapshot(collection(db, 'orders'), (snap) => {
@@ -48,15 +51,21 @@ export default function AdminDashboard() {
         pendingOrders, 
         completedOrders 
       }));
+    }, (err) => {
+      console.warn("AdminDashboard: Error loading orders", err);
     });
 
     const unsubTickets = onSnapshot(collection(db, 'tickets'), (snap) => {
       const openTickets = snap.docs.filter(doc => doc.data().status === 'open').length;
       setStats(prev => ({ ...prev, openTickets }));
+    }, (err) => {
+      console.warn("AdminDashboard: Error loading tickets", err);
     });
 
     const unsubDeposits = onSnapshot(query(collection(db, 'transactions'), where('type', '==', 'deposit'), where('status', '==', 'pending')), (snap) => {
       setStats(prev => ({ ...prev, pendingDeposits: snap.size }));
+    }, (err) => {
+      console.warn("AdminDashboard: Error loading deposits", err);
     });
 
     return () => {
